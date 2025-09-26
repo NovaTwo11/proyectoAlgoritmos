@@ -1,0 +1,30 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /proyecto-algoritmos
+
+spring:
+  application:
+    name: proyecto-algoritmos
+
+  task:
+    execution:
+      pool:
+        core-size: 4
+        max-size: 8
+        queue-capacity: 100
+
+logging:
+  level:
+    co.edu.uniquindio.proyectoalgoritmos: DEBUG
+    org.springframework: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+app:
+  file-storage:
+    input-path: "src/main/resources/data/input"
+    output-path: "src/main/resources/data/output"
+  processing:
+    similarity-threshold: 0.85
+    max-concurrent-downloads: 3
