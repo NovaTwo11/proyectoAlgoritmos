@@ -1,13 +1,13 @@
 Método de ordenamiento,Tamaño,Tiempo (ms)
-TimSort,5000,4,0908
-Comb Sort,5000,4,4612
-Selection Sort,5000,22,3842
-Tree Sort,5000,2,3276
-Pigeonhole Sort,5000,5,0173
-Bucket Sort,5000,5,0940
-QuickSort,5000,1,6879
-HeapSort,5000,1,6300
-Bitonic Sort,5000,1,9264
-Gnome Sort,5000,37,5687
-Binary Insertion Sort,5000,5,2420
-Radix Sort,5000,3,7303
+TimSort,5000,3,9325
+Comb Sort,5000,4,2834
+Selection Sort,5000,21,9877
+Tree Sort,5000,2,3721
+Pigeonhole Sort,5000,4,8877
+Bucket Sort,5000,5,8849
+QuickSort,5000,1,2302
+HeapSort,5000,1,6339
+Bitonic Sort,5000,1,8955
+Gnome Sort,5000,36,7379
+Binary Insertion Sort,5000,5,0699
+Radix Sort,5000,3,6220
