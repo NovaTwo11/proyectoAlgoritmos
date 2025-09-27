@@ -36,7 +36,7 @@ public class ValidationUtils {
             errors.add("Debe tener al menos un autor válido");
         }
 
-        if (record.getYear() != null && (record.getYear() < 1900 || record.getYear() > 2030)) {
+        if (record.getYear() != 0 && (record.getYear() < 1900 || record.getYear() > 2030)) {
             errors.add("El año debe estar entre 1900 y 2030");
         }
 

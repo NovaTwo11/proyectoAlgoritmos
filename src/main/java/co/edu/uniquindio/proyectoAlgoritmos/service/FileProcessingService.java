@@ -66,4 +66,29 @@ public class FileProcessingService {
         // Implementación futura para limpiar archivos antiguos
         log.info("Limpieza de archivos antiguos (implementación pendiente)");
     }
+
+    public String saveUnifiedRecordsFixedName(List<ScientificRecord> records) {
+        try {
+            fileRepository.ensureDirectoriesExist();
+            String path = fileRepository.getOutputFilePath("unified_records.csv");
+            csvUtils.writeRecordsToCsv(records, path);
+            log.info("Archivo unificado (nombre fijo) guardado: {}", path);
+            return path;
+        } catch (IOException e) {
+            throw new RuntimeException("Error guardando unified_records.csv", e);
+        }
+    }
+
+    public String saveDuplicateRecordsFixedName(Map<String, List<ScientificRecord>> duplicateGroups) {
+        try {
+            fileRepository.ensureDirectoriesExist();
+            String path = fileRepository.getOutputFilePath("duplicate_records.csv");
+            List<ScientificRecord> allDup = duplicateGroups.values().stream().flatMap(List::stream).toList();
+            csvUtils.writeRecordsToCsv(allDup, path);
+            log.info("Archivo de duplicados (nombre fijo) guardado: {}", path);
+            return path;
+        } catch (IOException e) {
+            throw new RuntimeException("Error guardando duplicate_records.csv", e);
+        }
+    }
 }

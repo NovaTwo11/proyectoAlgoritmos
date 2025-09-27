@@ -34,9 +34,9 @@ class DuplicateDetectionServiceTest {
     @BeforeEach
     void setUp() {
         testRecords = List.of(
-                ScientificRecord.builder().title("Generative AI in Education").source(DataSource.ACM).build(),
-                ScientificRecord.builder().title("Generative AI in Education").source(DataSource.SAGE).build(),
-                ScientificRecord.builder().title("Machine Learning Applications").source(DataSource.ACM).build()
+                ScientificRecord.builder().title("Generative AI in Education").source(DataSource.ACM.toString()).build(),
+                ScientificRecord.builder().title("Generative AI in Education").source(DataSource.SAGE.toString()).build(),
+                ScientificRecord.builder().title("Machine Learning Applications").source(DataSource.ACM.toString()).build()
         );
 
         // Solo stubeo lo que sé que voy a necesitar

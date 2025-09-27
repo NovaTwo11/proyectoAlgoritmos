@@ -30,7 +30,8 @@ public class CsvUtils {
         List<ScientificRecord> records = new ArrayList<>();
 
         try (Reader reader = new FileReader(filePath);
-             CSVParser csvParser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader())) {
+             CSVParser csvParser = new CSVParser(reader,
+                     CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build())) {
 
             for (CSVRecord csvRecord : csvParser) {
                 try {
@@ -48,7 +49,8 @@ public class CsvUtils {
 
     public void writeRecordsToCsv(List<ScientificRecord> records, String filePath) throws IOException {
         try (Writer writer = new FileWriter(filePath);
-             CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT.withHeader(HEADERS))) {
+             CSVPrinter csvPrinter = new CSVPrinter(writer,
+                     CSVFormat.DEFAULT.builder().setHeader(HEADERS).build())) {
 
             for (ScientificRecord record : records) {
                 csvPrinter.printRecord(
@@ -62,7 +64,7 @@ public class CsvUtils {
                         record.getYear(),
                         record.getDoi(),
                         record.getUrl(),
-                        record.getSource() != null ? record.getSource().name() : "",
+                        record.getSource() != null ? record.getSource() : "",
                         record.getCountry(),
                         record.getLanguage()
                 );
@@ -84,7 +86,7 @@ public class CsvUtils {
                 .year(parseInteger(getValueOrDefault(csvRecord, "Year", "")))
                 .doi(getValueOrDefault(csvRecord, "DOI", ""))
                 .url(getValueOrDefault(csvRecord, "URL", ""))
-                .source(parseDataSource(getValueOrDefault(csvRecord, "Source", "")))
+                .source(parseDataSource(getValueOrDefault(csvRecord, "Source", "")).toString())
                 .country(getValueOrDefault(csvRecord, "Country", ""))
                 .language(getValueOrDefault(csvRecord, "Language", ""))
                 .build();

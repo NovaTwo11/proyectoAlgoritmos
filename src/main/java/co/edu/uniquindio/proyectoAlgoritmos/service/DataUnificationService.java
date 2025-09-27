@@ -6,6 +6,7 @@ import co.edu.uniquindio.proyectoAlgoritmos.model.DataSource;
 import co.edu.uniquindio.proyectoAlgoritmos.model.ProcessingStatus;
 import co.edu.uniquindio.proyectoAlgoritmos.model.ScientificRecord;
 import co.edu.uniquindio.proyectoAlgoritmos.util.CsvUtils;
+import co.edu.uniquindio.proyectoAlgoritmos.util.ValidationUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -27,87 +28,102 @@ public class DataUnificationService {
     private final DuplicateDetectionService duplicateDetectionService;
     private final FileProcessingService fileProcessingService;
     private final CsvUtils csvUtils;
+    private final ValidationUtils validationUtils;
+
+    private final co.edu.uniquindio.proyectoAlgoritmos.reader.api.DblpApiReader dblpApiReader;
+    private final co.edu.uniquindio.proyectoAlgoritmos.reader.api.ScopusApiReader scopusApiReader;
 
     @Async
     public CompletableFuture<ProcessingResultDto> processAndUnifyData(String searchQuery) {
-        String processId = UUID.randomUUID().toString();
-        LocalDateTime startTime = LocalDateTime.now();
-
-        log.info("Iniciando proceso de unificación [{}] con query: {}", processId, searchQuery);
+        String processId = java.util.UUID.randomUUID().toString();
+        var startTime = java.time.LocalDateTime.now();
+        String q = validationUtils.sanitizeSearchQuery(searchQuery);
 
         try {
-            // 1. Descargar datos de múltiples fuentes
-            List<ScientificRecord> allRecords = downloadFromAllSources(searchQuery);
+            // 1) Descargar datos reales (APIs/fallback)
+            List<ScientificRecord> allRecords = downloadFromAllSources(q);
 
-            // 2. Detectar duplicados
+            // 2) Duplicados
             Map<String, List<ScientificRecord>> duplicateGroups =
                     duplicateDetectionService.detectDuplicates(allRecords);
 
-            // 3. Obtener registros únicos
+            // 3) Únicos
             List<ScientificRecord> uniqueRecords =
                     duplicateDetectionService.getUniqueRecords(allRecords);
 
-            // 4. Generar archivos de salida
-            String unifiedFilePath = fileProcessingService.saveUnifiedRecords(uniqueRecords, processId);
-            String duplicatesFilePath = fileProcessingService.saveDuplicateRecords(duplicateGroups, processId);
+            // 4) Guardado (dos archivos fijos + (opcional) versionados)
+            String unifiedFixed = fileProcessingService.saveUnifiedRecordsFixedName(uniqueRecords);
+            String duplicatesFixed = fileProcessingService.saveDuplicateRecordsFixedName(duplicateGroups);
 
-            // 5. Generar estadísticas
+            // Opcional: mantener además archivos versionados
+            // String unifiedVersioned = fileProcessingService.saveUnifiedRecords(uniqueRecords, processId);
+            // String duplicatesVersioned = fileProcessingService.saveDuplicateRecords(duplicateGroups, processId);
+
+            // 5) Stats
             UnificationStatsDto stats = generateStats(allRecords, uniqueRecords, duplicateGroups);
 
-            LocalDateTime endTime = LocalDateTime.now();
-
-            ProcessingResultDto result = ProcessingResultDto.builder()
+            var endTime = java.time.LocalDateTime.now();
+            var result = ProcessingResultDto.builder()
                     .processId(processId)
                     .status(ProcessingStatus.COMPLETED)
                     .message("Proceso completado exitosamente")
                     .stats(stats)
                     .startTime(startTime)
                     .endTime(endTime)
-                    .unifiedFilePath(unifiedFilePath)
-                    .duplicatesFilePath(duplicatesFilePath)
+                    .unifiedFilePath(unifiedFixed)
+                    .duplicatesFilePath(duplicatesFixed)
                     .build();
 
             log.info("Proceso [{}] completado. Únicos: {}, Duplicados: {}",
                     processId, uniqueRecords.size(), stats.getDuplicatesFound());
 
-            return CompletableFuture.completedFuture(result);
+            return java.util.concurrent.CompletableFuture.completedFuture(result);
 
         } catch (Exception e) {
             log.error("Error en proceso [{}]: {}", processId, e.getMessage(), e);
-
-            ProcessingResultDto errorResult = ProcessingResultDto.builder()
+            var errorResult = ProcessingResultDto.builder()
                     .processId(processId)
                     .status(ProcessingStatus.FAILED)
                     .message("Error: " + e.getMessage())
                     .startTime(startTime)
-                    .endTime(LocalDateTime.now())
+                    .endTime(java.time.LocalDateTime.now())
                     .build();
-
-            return CompletableFuture.completedFuture(errorResult);
+            return java.util.concurrent.CompletableFuture.completedFuture(errorResult);
         }
     }
 
-    private List<ScientificRecord> downloadFromAllSources(String searchQuery) {
-        List<ScientificRecord> allRecords = new ArrayList<>();
+    private List<ScientificRecord> downloadFromAllSources(String q) {
+        List<ScientificRecord> all = new ArrayList<>();
 
-        // Descargar desde ACM
+        // DBLP API (pública)
         try {
-            List<ScientificRecord> acmRecords = downloaderService.downloadFromSource(DataSource.ACM, searchQuery);
-            allRecords.addAll(acmRecords);
+            var dblp = dblpApiReader.searchRecords(q);
+            log.info("DBLP retornó {} registros", dblp.size());
+            all.addAll(dblp);
         } catch (Exception e) {
-            log.warn("Error descargando desde ACM: {}", e.getMessage());
+            log.warn("Fallo DBLP: {}", e.getMessage());
         }
 
-        // Descargar desde SAGE
+        // Scopus API (si hay key), si no fallback a ScienceDirect CSV
         try {
-            List<ScientificRecord> sageRecords = downloaderService.downloadFromSource(DataSource.SAGE, searchQuery);
-            allRecords.addAll(sageRecords);
+            var scopus = scopusApiReader.searchRecords(q); // lanza si no hay key
+            log.info("Scopus retornó {} registros", scopus.size());
+            all.addAll(scopus);
+        } catch (IllegalStateException noKey) {
+            log.warn("Scopus API Key no configurada. Fallback a ScienceDirect CSV.");
+            try {
+                var sd = downloaderService.downloadFromSource(DataSource.SCIENCE_DIRECT, q);
+                log.info("ScienceDirect CSV retornó {} registros", sd.size());
+                all.addAll(sd);
+            } catch (Exception e) {
+                log.warn("Fallo fallback ScienceDirect CSV: {}", e.getMessage());
+            }
         } catch (Exception e) {
-            log.warn("Error descargando desde SAGE: {}", e.getMessage());
+            log.warn("Fallo Scopus API: {}", e.getMessage());
         }
 
-        log.info("Total de registros descargados: {}", allRecords.size());
-        return allRecords;
+        log.info("Total registros descargados (todas las fuentes): {}", all.size());
+        return all;
     }
 
     private UnificationStatsDto generateStats(List<ScientificRecord> allRecords,
@@ -119,11 +135,11 @@ public class DataUnificationService {
                 .sum();
 
         long recordsFromACM = allRecords.stream()
-                .filter(r -> r.getSource() == DataSource.ACM)
+                .filter(r -> r.getSource() == DataSource.ACM.toString())
                 .count();
 
         long recordsFromSAGE = allRecords.stream()
-                .filter(r -> r.getSource() == DataSource.SAGE)
+                .filter(r -> r.getSource() == DataSource.SAGE.toString())
                 .count();
 
         double duplicatePercentage = allRecords.isEmpty() ? 0.0 :

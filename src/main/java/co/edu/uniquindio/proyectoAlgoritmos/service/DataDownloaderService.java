@@ -64,7 +64,7 @@ public class DataDownloaderService {
                         .keywords(List.of("generative AI", "education", "machine learning"))
                         .journal("AI in Education Journal")
                         .year(2024)
-                        .source(source)
+                        .source(source.toString())
                         .country("USA")
                         .build(),
 
@@ -75,7 +75,7 @@ public class DataDownloaderService {
                         .keywords(List.of("ethics", "AI", "generative models"))
                         .journal("Ethics in Technology")
                         .year(2023)
-                        .source(source)
+                        .source(source.toString())
                         .country("UK")
                         .build()
         );

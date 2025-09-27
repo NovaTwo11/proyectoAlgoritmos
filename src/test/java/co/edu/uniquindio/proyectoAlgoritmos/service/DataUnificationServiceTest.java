@@ -46,13 +46,13 @@ class DataUnificationServiceTest {
                 ScientificRecord.builder()
                         .title("AI in Education")
                         .authors(List.of("Smith, J."))
-                        .source(DataSource.ACM)
+                        .source(DataSource.ACM.toString())
                         .build(),
 
                 ScientificRecord.builder()
                         .title("Machine Learning Applications")
                         .authors(List.of("Johnson, M."))
-                        .source(DataSource.SAGE)
+                        .source(DataSource.SAGE.toString())
                         .build()
         );
     }
