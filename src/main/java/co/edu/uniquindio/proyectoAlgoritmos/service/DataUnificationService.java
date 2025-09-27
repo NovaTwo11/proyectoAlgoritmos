@@ -6,14 +6,12 @@ import co.edu.uniquindio.proyectoAlgoritmos.model.DataSource;
 import co.edu.uniquindio.proyectoAlgoritmos.model.ProcessingStatus;
 import co.edu.uniquindio.proyectoAlgoritmos.model.ScientificRecord;
 import co.edu.uniquindio.proyectoAlgoritmos.util.CsvUtils;
-import co.edu.uniquindio.proyectoAlgoritmos.util.ValidationUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -28,102 +26,129 @@ public class DataUnificationService {
     private final DuplicateDetectionService duplicateDetectionService;
     private final FileProcessingService fileProcessingService;
     private final CsvUtils csvUtils;
-    private final ValidationUtils validationUtils;
-
-    private final co.edu.uniquindio.proyectoAlgoritmos.reader.api.DblpApiReader dblpApiReader;
-    private final co.edu.uniquindio.proyectoAlgoritmos.reader.api.ScopusApiReader scopusApiReader;
 
     @Async
     public CompletableFuture<ProcessingResultDto> processAndUnifyData(String searchQuery) {
-        String processId = java.util.UUID.randomUUID().toString();
-        var startTime = java.time.LocalDateTime.now();
-        String q = validationUtils.sanitizeSearchQuery(searchQuery);
+        String processId = UUID.randomUUID().toString();
+        LocalDateTime startTime = LocalDateTime.now();
+
+        log.info("Iniciando proceso de unificación [{}] con query: {}", processId, searchQuery);
 
         try {
-            // 1) Descargar datos reales (APIs/fallback)
-            List<ScientificRecord> allRecords = downloadFromAllSources(q);
+            // 1. Descargar datos de DBLP + OpenAlex
+            List<ScientificRecord> allRecords = downloaderService.downloadFromAllSources(searchQuery);
 
-            // 2) Duplicados
+            if (allRecords.isEmpty()) {
+                log.warn("No se descargaron registros de ninguna fuente");
+                return CompletableFuture.completedFuture(createEmptyResult(processId, startTime));
+            }
+
+            // 2. Detectar duplicados
             Map<String, List<ScientificRecord>> duplicateGroups =
                     duplicateDetectionService.detectDuplicates(allRecords);
 
-            // 3) Únicos
+            // 3. Obtener registros únicos
             List<ScientificRecord> uniqueRecords =
                     duplicateDetectionService.getUniqueRecords(allRecords);
 
-            // 4) Guardado (dos archivos fijos + (opcional) versionados)
-            String unifiedFixed = fileProcessingService.saveUnifiedRecordsFixedName(uniqueRecords);
-            String duplicatesFixed = fileProcessingService.saveDuplicateRecordsFixedName(duplicateGroups);
+            // 4. Generar archivos de salida con nombres fijos según requisitos
+            String unifiedFilePath = saveUnifiedRecords(uniqueRecords);
+            String duplicatesFilePath = saveDuplicateRecords(duplicateGroups);
 
-            // Opcional: mantener además archivos versionados
-            // String unifiedVersioned = fileProcessingService.saveUnifiedRecords(uniqueRecords, processId);
-            // String duplicatesVersioned = fileProcessingService.saveDuplicateRecords(duplicateGroups, processId);
-
-            // 5) Stats
+            // 5. Generar estadísticas
             UnificationStatsDto stats = generateStats(allRecords, uniqueRecords, duplicateGroups);
 
-            var endTime = java.time.LocalDateTime.now();
-            var result = ProcessingResultDto.builder()
+            LocalDateTime endTime = LocalDateTime.now();
+
+            ProcessingResultDto result = ProcessingResultDto.builder()
                     .processId(processId)
                     .status(ProcessingStatus.COMPLETED)
                     .message("Proceso completado exitosamente")
                     .stats(stats)
                     .startTime(startTime)
                     .endTime(endTime)
-                    .unifiedFilePath(unifiedFixed)
-                    .duplicatesFilePath(duplicatesFixed)
+                    .unifiedFilePath(unifiedFilePath)
+                    .duplicatesFilePath(duplicatesFilePath)
+                    .unifiedRecords(uniqueRecords)
                     .build();
 
             log.info("Proceso [{}] completado. Únicos: {}, Duplicados: {}",
                     processId, uniqueRecords.size(), stats.getDuplicatesFound());
 
-            return java.util.concurrent.CompletableFuture.completedFuture(result);
+            return CompletableFuture.completedFuture(result);
 
         } catch (Exception e) {
             log.error("Error en proceso [{}]: {}", processId, e.getMessage(), e);
-            var errorResult = ProcessingResultDto.builder()
+
+            ProcessingResultDto errorResult = ProcessingResultDto.builder()
                     .processId(processId)
                     .status(ProcessingStatus.FAILED)
                     .message("Error: " + e.getMessage())
                     .startTime(startTime)
-                    .endTime(java.time.LocalDateTime.now())
+                    .endTime(LocalDateTime.now())
                     .build();
-            return java.util.concurrent.CompletableFuture.completedFuture(errorResult);
+
+            return CompletableFuture.completedFuture(errorResult);
         }
     }
 
-    private List<ScientificRecord> downloadFromAllSources(String q) {
-        List<ScientificRecord> all = new ArrayList<>();
-
-        // DBLP API (pública)
+    /**
+     * Guarda registros unificados con nombre fijo según requisitos del proyecto
+     */
+    private String saveUnifiedRecords(List<ScientificRecord> records) {
         try {
-            var dblp = dblpApiReader.searchRecords(q);
-            log.info("DBLP retornó {} registros", dblp.size());
-            all.addAll(dblp);
-        } catch (Exception e) {
-            log.warn("Fallo DBLP: {}", e.getMessage());
-        }
+            String fileName = "resultados_unificados.csv";
+            String filePath = "src/main/resources/data/output/" + fileName;
 
-        // Scopus API (si hay key), si no fallback a ScienceDirect CSV
+            csvUtils.writeRecordsToCsv(records, filePath);
+            log.info("Archivo unificado guardado: {} ({} registros)", filePath, records.size());
+
+            return filePath;
+        } catch (Exception e) {
+            throw new RuntimeException("Error guardando archivo unificado", e);
+        }
+    }
+
+    /**
+     * Guarda registros duplicados con nombre fijo según requisitos del proyecto
+     */
+    private String saveDuplicateRecords(Map<String, List<ScientificRecord>> duplicateGroups) {
         try {
-            var scopus = scopusApiReader.searchRecords(q); // lanza si no hay key
-            log.info("Scopus retornó {} registros", scopus.size());
-            all.addAll(scopus);
-        } catch (IllegalStateException noKey) {
-            log.warn("Scopus API Key no configurada. Fallback a ScienceDirect CSV.");
-            try {
-                var sd = downloaderService.downloadFromSource(DataSource.SCIENCE_DIRECT, q);
-                log.info("ScienceDirect CSV retornó {} registros", sd.size());
-                all.addAll(sd);
-            } catch (Exception e) {
-                log.warn("Fallo fallback ScienceDirect CSV: {}", e.getMessage());
-            }
-        } catch (Exception e) {
-            log.warn("Fallo Scopus API: {}", e.getMessage());
-        }
+            String fileName = "resultados_duplicados.csv";
+            String filePath = "src/main/resources/data/output/" + fileName;
 
-        log.info("Total registros descargados (todas las fuentes): {}", all.size());
-        return all;
+            // Aplanar todos los duplicados en una sola lista
+            List<ScientificRecord> allDuplicates = duplicateGroups.values().stream()
+                    .flatMap(List::stream)
+                    .toList();
+
+            csvUtils.writeRecordsToCsv(allDuplicates, filePath);
+            log.info("Archivo de duplicados guardado: {} ({} registros)", filePath, allDuplicates.size());
+
+            return filePath;
+        } catch (Exception e) {
+            throw new RuntimeException("Error guardando archivo de duplicados", e);
+        }
+    }
+
+    private ProcessingResultDto createEmptyResult(String processId, LocalDateTime startTime) {
+        UnificationStatsDto emptyStats = UnificationStatsDto.builder()
+                .totalRecordsProcessed(0)
+                .uniqueRecords(0)
+                .duplicatesFound(0)
+                .recordsFromSource1(0)
+                .recordsFromSource2(0)
+                .duplicatePercentage(0.0)
+                .build();
+
+        return ProcessingResultDto.builder()
+                .processId(processId)
+                .status(ProcessingStatus.COMPLETED)
+                .message("No se encontraron registros para procesar")
+                .stats(emptyStats)
+                .startTime(startTime)
+                .endTime(LocalDateTime.now())
+                .build();
     }
 
     private UnificationStatsDto generateStats(List<ScientificRecord> allRecords,
@@ -134,12 +159,12 @@ public class DataUnificationService {
                 .mapToInt(List::size)
                 .sum();
 
-        long recordsFromACM = allRecords.stream()
-                .filter(r -> r.getSource() == DataSource.ACM.toString())
+        long recordsFromDBLP = allRecords.stream()
+                .filter(r -> DataSource.DBLP.toString().equals(r.getSource()))
                 .count();
 
-        long recordsFromSAGE = allRecords.stream()
-                .filter(r -> r.getSource() == DataSource.SAGE.toString())
+        long recordsFromOpenAlex = allRecords.stream()
+                .filter(r -> DataSource.OPENALEX.toString().equals(r.getSource()))
                 .count();
 
         double duplicatePercentage = allRecords.isEmpty() ? 0.0 :
@@ -149,8 +174,8 @@ public class DataUnificationService {
                 .totalRecordsProcessed(allRecords.size())
                 .uniqueRecords(uniqueRecords.size())
                 .duplicatesFound(totalDuplicates)
-                .recordsFromSource1((int) recordsFromACM)
-                .recordsFromSource2((int) recordsFromSAGE)
+                .recordsFromSource1((int) recordsFromDBLP)
+                .recordsFromSource2((int) recordsFromOpenAlex)
                 .duplicatePercentage(duplicatePercentage)
                 .build();
     }

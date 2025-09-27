@@ -16,14 +16,10 @@ spring:
 
 logging:
   level:
-    co.edu.uniquindio.proyectoalgoritmos: DEBUG
+    co.edu.uniquindio.proyectoAlgoritmos: DEBUG
     org.springframework: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
-
-scopus:
-  api:
-    key: ${SCOPUS_API_KEY:}  # define variable de entorno o pega tu key aquí
 
 app:
   file-storage:
@@ -31,4 +27,26 @@ app:
     output-path: "src/main/resources/data/output"
   processing:
     similarity-threshold: 0.85
-    max-concurrent-downloads: 5
+    max-concurrent-downloads: 3
+
+# Configuración de APIs
+api:
+  dblp:
+    max-results: 1000
+    base-url: "https://dblp.org/search/publ/api"
+  openalex:
+    max-results: 1000
+    base-url: "https://api.openalex.org/works"
+    # Múltiples concept IDs - se ejecutará una query por cada uno
+    concept-ids-csv: "C167966045,C2988773926"  # Generative model, GAN
+    mailto: "holdann.lopezs@uqvirtual.edu.co"
+    from-date: "2018-01-01"
+    to-date: "2025-12-31"
+    include-types: "journal-article,proceedings-article"
+    fallback-query: "artificial intelligence"
+
+# Configuración general del proyecto
+proyecto:
+  algoritmos:
+    max-records-per-source: 1000
+    output-directory: "src/main/resources/data/output"

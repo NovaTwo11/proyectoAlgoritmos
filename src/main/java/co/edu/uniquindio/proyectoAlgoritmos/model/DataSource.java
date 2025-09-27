@@ -1,11 +1,11 @@
 package co.edu.uniquindio.proyectoAlgoritmos.model;
 
 public enum DataSource {
+    DBLP("DBLP Computer Science Bibliography"),
+    OPENALEX("OpenAlex"),
     ACM("ACM Digital Library"),
     SAGE("SAGE Journals"),
     SCIENCE_DIRECT("ScienceDirect"),
-    DBLP("DBLP"),
-    SCOPUS("Scopus"),
     UNKNOWN("Unknown Source");
 
     private final String displayName;
