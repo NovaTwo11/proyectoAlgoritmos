@@ -106,9 +106,6 @@ public class DataDownloaderService {
         return switch (source) {
             case DBLP -> "dblp_generative_ai.csv";
             case OPENALEX -> "openalex_generative_ai.csv";
-            case ACM -> "acm_generative_ai.csv";
-            case SAGE -> "sage_generative_ai.csv";
-            case SCIENCE_DIRECT -> "sciencedirect_generative_ai.csv";
             default -> "unknown_source.csv";
         };
     }

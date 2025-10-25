@@ -24,7 +24,6 @@ public class DataUnificationService {
 
     private final DataDownloaderService downloaderService;
     private final DuplicateDetectionService duplicateDetectionService;
-    private final FileProcessingService fileProcessingService;
     private final CsvUtils csvUtils;
 
     @Async
