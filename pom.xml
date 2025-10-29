@@ -21,6 +21,7 @@
 		<java.version>17</java.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<selenium.version>4.31.0</selenium.version>
 	</properties>
 
 	<dependencies>
@@ -115,6 +116,39 @@
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-lang3</artifactId>
 			<version>3.18.0</version>
+		</dependency>
+
+		<!-- Selenium WebDriver para automatización -->
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-java</artifactId>
+			<version>${selenium.version}</version>
+		</dependency>
+
+		<!-- DevTools específicos usados por el código (v122 y v85) -->
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-devtools-v122</artifactId>
+			<version>4.18.1</version>
+		</dependency>
+		<dependency>
+			<groupId>org.seleniumhq.selenium</groupId>
+			<artifactId>selenium-devtools-v85</artifactId>
+			<version>4.21.0</version>
+		</dependency>
+
+		<!-- WebDriverManager para gestión automática de drivers -->
+		<dependency>
+			<groupId>io.github.bonigarcia</groupId>
+			<artifactId>webdrivermanager</artifactId>
+			<version>5.8.0</version>
+		</dependency>
+
+		<!-- JBibTeX para parseo de archivos BibTeX -->
+		<dependency>
+			<groupId>org.jbibtex</groupId>
+			<artifactId>jbibtex</artifactId>
+			<version>1.0.20</version>
 		</dependency>
 
 		<!-- Testing -->

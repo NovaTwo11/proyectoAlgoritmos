@@ -2,6 +2,7 @@ package co.edu.uniquindio.proyectoAlgoritmos.exception;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -28,7 +29,9 @@ public class GlobalExceptionHandler {
         errorResponse.put("message", ex.getMessage());
         errorResponse.put("path", request.getDescription(false));
 
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorResponse);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -44,7 +47,9 @@ public class GlobalExceptionHandler {
         errorResponse.put("message", ex.getMessage());
         errorResponse.put("path", request.getDescription(false));
 
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorResponse);
     }
 
     @ExceptionHandler(Exception.class)
@@ -60,6 +65,8 @@ public class GlobalExceptionHandler {
         errorResponse.put("message", "Ha ocurrido un error interno. Contacte al administrador.");
         errorResponse.put("path", request.getDescription(false));
 
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorResponse);
     }
 }
