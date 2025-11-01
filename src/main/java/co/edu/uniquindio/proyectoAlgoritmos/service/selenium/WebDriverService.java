@@ -47,6 +47,9 @@ public class WebDriverService {
         prefs.put("profile.default_content_settings.popups", 0);
         prefs.put("profile.default_content_setting_values.notifications", 2);
         prefs.put("plugins.always_open_pdf_externally", true);
+        // Evitar el aviso de guardar contraseña y el autocompletado de credenciales
+        prefs.put("credentials_enable_service", false);
+        prefs.put("profile.password_manager_enabled", false);
 
         ChromeOptions options = new ChromeOptions();
         options.setExperimentalOption("prefs", prefs);
@@ -58,6 +61,8 @@ public class WebDriverService {
         // Ocultar barra de "Chrome está siendo controlado por un software automatizado" y señales básicas
         options.addArguments("--disable-infobars");
         options.addArguments("--disable-blink-features=AutomationControlled");
+        // Reducir aún más prompts relacionados con contraseñas
+        options.addArguments("--disable-features=PasswordManagerOnboarding,PasswordManagerRedesign");
         options.setExperimentalOption("excludeSwitches", Arrays.asList("enable-automation", "enable-logging"));
         options.setExperimentalOption("useAutomationExtension", false);
 

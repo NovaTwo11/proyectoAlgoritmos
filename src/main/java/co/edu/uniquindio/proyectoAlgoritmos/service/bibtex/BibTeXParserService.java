@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -18,9 +19,11 @@ public class BibTeXParserService {
 
     public List<Article> parseBib(File file) {
         List<Article> out = new ArrayList<>();
-        try (Reader r = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)) {
+        try {
+            String raw = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+            String sanitized = sanitizeBibtex(raw);
             BibTeXParser parser = new BibTeXParser();
-            BibTeXDatabase db = parser.parse(r);
+            BibTeXDatabase db = parser.parse(new StringReader(sanitized));
             for (Map.Entry<Key, BibTeXEntry> e : db.getEntries().entrySet()) {
                 out.add(toArticle(e.getKey(), e.getValue()));
             }
@@ -93,7 +96,10 @@ public class BibTeXParserService {
     }
 
     public void exportCustomBib(List<Article> arts, File out) throws IOException {
-        out.getParentFile().mkdirs();
+        if (out.getParentFile() != null) {
+            // crear directorio si no existe
+            out.getParentFile().mkdirs();
+        }
         try (BufferedWriter w = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(out), StandardCharsets.UTF_8))) {
             for (Article a : arts) {
                 w.write(formatAsBib(a));
@@ -117,8 +123,8 @@ public class BibTeXParserService {
         append(sb, "isbn", a.getIsbn());
         append(sb, "doi", a.getDoi());
         append(sb, "url", a.getUrl());
-        if (a.safeAuthors().size() > 0) sb.append("author = {").append(String.join(" and ", a.safeAuthors())).append("}, ");
-        if (a.safeKeywords().size() > 0) sb.append("keywords = {").append(String.join(", ", a.safeKeywords())).append("}, ");
+        if (!a.safeAuthors().isEmpty()) sb.append("author = {").append(escapeBibValue(String.join(" and ", a.safeAuthors()))).append("}, ");
+        if (!a.safeKeywords().isEmpty()) sb.append("keywords = {").append(escapeBibValue(String.join(", ", a.safeKeywords()))).append("}, ");
         append(sb, "abstract", a.getAbstractText());
         // remover coma final si existe
         int len = sb.length();
@@ -131,7 +137,17 @@ public class BibTeXParserService {
     }
 
     private void append(StringBuilder sb, String k, String v) {
-        if (v != null && !v.isBlank()) sb.append(k).append(" = {").append(v).append("}, ");
+        String vv = escapeBibValue(v);
+        if (vv != null && !vv.isBlank()) sb.append(k).append(" = {").append(vv).append("}, ");
+    }
+
+    private static String escapeBibValue(String v) {
+        if (v == null) return null;
+        String s = v;
+        // Escapar % y & que no estén ya escapados
+        s = s.replaceAll("(?<!\\\\)%", "\\\\%");
+        s = s.replaceAll("(?<!\\\\)&", "\\\\&");
+        return s;
     }
 
     public String formatDuplicateLine(Article a) {
@@ -186,6 +202,7 @@ public class BibTeXParserService {
     // Fallback parser basado en regex robusto (acepta valores entre llaves o comillas)
     private List<Article> parseBibFallback(File file) throws IOException {
         String content = new String(java.nio.file.Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+        content = sanitizeBibtex(content);
         List<Article> list = new ArrayList<>();
         Pattern entryPat = Pattern.compile("@\\s*([A-Za-z]+)\\s*\\{\\s*([^,}]+)\\s*,([\\s\\S]*?)\\}\\s*(?=\\n@|\\z)", Pattern.MULTILINE);
         Matcher em = entryPat.matcher(content);
@@ -230,5 +247,22 @@ public class BibTeXParserService {
             list.add(a);
         }
         return list;
+    }
+
+    // Sanitización solicitada: corrige keywords mal cerrados, escapa %, en-dash en pages, escapa & y añade comas entre campos
+    private static String sanitizeBibtex(String bib) {
+        String s = bib;
+        // 1) Unir keywords mal cerrados
+        s = s.replaceAll("(?is)(keywords\\s*=\\s*\\{[^}]*\\}),\\s*([^}\\n]+)\\}", "$1, $2}");
+        // 2) Escapar % (usar replace para no lidiar con reemplazo regex)
+        s = s.replace("%", "\\%");
+        // 3) Reemplazar en-dash por doble guion en páginas
+        s = s.replaceAll("pages\\s*=\\s*\\{([0-9]+)\\u2013([0-9]+)\\}", "pages = {$1--$2}");
+        s = s.replaceAll("pages\\s*=\\s*\\{([0-9]+)–([0-9]+)\\}", "pages = {$1--$2}");
+        // 4) Escapar & (usar replace)
+        s = s.replace("&", "\\&");
+        // 5) Añadir coma faltante antes del siguiente campo
+        s = s.replaceAll("}\\s*\\n\\s*([a-zA-Z]+)\\s*=", "},\n  $1 =");
+        return s;
     }
 }

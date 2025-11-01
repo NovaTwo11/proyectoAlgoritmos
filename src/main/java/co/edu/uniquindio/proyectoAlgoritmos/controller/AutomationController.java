@@ -17,8 +17,6 @@ public class AutomationController {
 
     @PostMapping("/download-articles")
     public ResponseEntity<String> runReq1(@RequestParam(required = false) String query) {
-
-        orchestrator.downloadArticles(query);
-        return ResponseEntity.ok("Requirement 1 ejecutado. Revisa: resources/downloads (archivos .bib descargados) y resources/data/output/downloads para resultados unificados.");
+        return orchestrator.downloadArticles(query);
     }
 }

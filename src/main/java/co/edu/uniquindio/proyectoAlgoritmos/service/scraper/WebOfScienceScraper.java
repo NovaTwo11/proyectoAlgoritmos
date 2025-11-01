@@ -8,6 +8,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.openqa.selenium.*;
 import org.springframework.stereotype.Service;
 
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -72,7 +77,7 @@ public class WebOfScienceScraper {
             if (!clickedSearch) { search.sendKeys(Keys.ENTER); }
             utils.humanDelay();
 
-            // 3) Abrir Export y escoger BibTeX según Instrucciones.txt
+            // 3) Abrir Export y escoger BibTeX
             boolean exportTrigger = utils.clickAny(d, 15,
                     By.id("export-trigger-btn"),
                     By.xpath("//button[contains(@class,'mat-mdc-menu-trigger') and .//span[contains(.,'Export')]]")
@@ -122,7 +127,86 @@ public class WebOfScienceScraper {
             if (!confirm) throw new RuntimeException("No se pudo confirmar la exportación en WOS");
             utils.downloadDelay();
 
-            dl.waitAndRenameLatestBib(cfg.getDownloadDirectory(), "WebOfScience");
+            // Esperar específicamente savedrecs.bib para evitar renombrar otros archivos
+            try {
+                var file = dl.waitAndRenameSpecificBib(cfg.getDownloadDirectory(), "savedrecs.bib", "WebOfScience");
+                if (file == null) {
+                    log.warn("[Web of Science] No se encontró savedrecs.bib en el tiempo esperado");
+                }
+            } catch (Exception ex) {
+                log.warn("[Web of Science] Error esperando/renombrando savedrecs.bib: {}", ex.getMessage());
+            }
+
+            // Asegurar que no queden archivos temporales de descarga antes de continuar (ej: .crdownload, .part, .tmp, .download)
+            try {
+                Path downloadDir = Paths.get(cfg.getDownloadDirectory());
+                if (Files.exists(downloadDir)) {
+                    int maxWaitSeconds = 120;
+                    int waited = 0;
+                    boolean hasTemp;
+                    do {
+                        hasTemp = false;
+                        try (DirectoryStream<Path> ds = Files.newDirectoryStream(downloadDir)) {
+                            for (Path p : ds) {
+                                String name = p.getFileName().toString().toLowerCase();
+                                if (name.endsWith(".crdownload") || name.endsWith(".part") || name.endsWith(".tmp") || name.endsWith(".download")) {
+                                    hasTemp = true;
+                                    break;
+                                }
+                            }
+                        } catch (Exception ex) {
+                            log.debug("Error comprobando carpeta de descargas: {}", ex.getMessage());
+                        }
+                        if (hasTemp) {
+                            utils.humanDelay(); // espera humana breve (aprox. 1s)
+                            waited++;
+                        }
+                    } while (hasTemp && waited < maxWaitSeconds);
+                    if (hasTemp) {
+                        log.warn("Tiempo de espera de descarga excedido; todavía existen archivos temporales en {}", cfg.getDownloadDirectory());
+                    } else {
+                        log.debug("Descarga completada: no hay archivos temporales en {}", cfg.getDownloadDirectory());
+                    }
+                } else {
+                    log.debug("Directorio de descargas no existe: {}", cfg.getDownloadDirectory());
+                }
+            } catch (Exception ex) {
+                log.debug("Fallo comprobando finalización de descarga: {}", ex.getMessage());
+            }
+
+            // 6) Cerrar sesión solo después de tener el archivo descargado
+            try {
+                boolean openedAccountMenu = utils.clickAny(d, 8,
+                        By.cssSelector("button.wos-login-account.mat-mdc-menu-trigger"),
+                        By.cssSelector("button[data-ta='wos-header-user_name']"),
+                        By.xpath("//button[@aria-haspopup='menu' and contains(@aria-label,'Account options')]")
+                );
+                if (openedAccountMenu) {
+                    utils.shortDelay();
+                    boolean clickedLogout = utils.clickAny(d, 8,
+                            By.cssSelector("a[routerlink='/my/sign-out']"),
+                            By.xpath("//a[contains(@href,'/wos/my/sign-out')]") ,
+                            By.xpath("//a[@role='menuitem']//span[normalize-space(text())='End session and log out']/ancestor::a")
+                    );
+                    if (clickedLogout) {
+                        // Esperar redirección o confirmación de cierre de sesión
+                        for (int i = 0; i < 10; i++) {
+                            utils.humanDelay();
+                            try {
+                                String u = d.getCurrentUrl();
+                                if (u != null && (u.contains("sign-out") || u.contains("login") || u.contains("access.clarivate"))) break;
+                            } catch (Exception ignore) {}
+                        }
+                        log.info("[Web of Science] Sesión cerrada (logout)");
+                    } else {
+                        log.debug("No se encontró la opción 'End session and log out'");
+                    }
+                } else {
+                    log.debug("No se pudo abrir el menú de cuenta para cerrar sesión");
+                }
+            } catch (Exception ex) {
+                log.debug("Fallo al intentar cerrar sesión: {}", ex.getMessage());
+            }
         } catch (Exception e) {
             log.warn("Fallo exportando en Web of Science: {}", e.getMessage());
         }

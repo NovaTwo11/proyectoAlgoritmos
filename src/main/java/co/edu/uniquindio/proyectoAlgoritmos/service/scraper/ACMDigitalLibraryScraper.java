@@ -93,16 +93,6 @@ public class ACMDigitalLibraryScraper {
             }
         }
 
-        // Intentar 100 por página (opcional)
-        try {
-            utils.setPerPage100(
-                    d,
-                    By.cssSelector("button[aria-label*='results per page'], button[aria-haspopup='listbox']"),
-                    By.xpath("//li//span[normalize-space()='100'] | //a[normalize-space()='100'] | //button[normalize-space()='100'] | //option[@value='100']"),
-                    By.cssSelector("select[name='hitsPerPage'], select#hitsPerPage, select.results-per-page")
-            );
-        } catch (Exception ignore) {}
-
         // Exportación global (una sola vez)
         try {
             // Seleccionar todos en página (por robustez)
@@ -174,15 +164,13 @@ public class ACMDigitalLibraryScraper {
                         } catch (Exception ignore) {}
 
                         if (downloadNow != null) {
-                            String dis = null, ariaDis = null, cls = null, href = null, dataHref = null;
-                            try { dis = downloadNow.getAttribute("disabled"); } catch (Exception ignore2) {}
-                            try { ariaDis = downloadNow.getAttribute("aria-disabled"); } catch (Exception ignore2) {}
+                            String cls = null, href = null, dataHref = null;
                             try { cls = downloadNow.getAttribute("class"); } catch (Exception ignore2) {}
                             try { href = downloadNow.getAttribute("href"); } catch (Exception ignore2) {}
                             try { dataHref = downloadNow.getAttribute("data-href"); } catch (Exception ignore2) {}
 
                             boolean classDisabled = (cls != null && cls.toLowerCase().contains("disabled"));
-                            log.info("[ACM] Botón 'Download now' detectado. disabled={}, aria-disabled={}, classContainsDisabled={}, href={}, data-href={}", dis, ariaDis, classDisabled, href, dataHref);
+                            log.info("[ACM] Botón 'Download now' detectado. disabled={}", classDisabled);
 
                             try {
                                 utils.scrollIntoView(d, downloadNow);
@@ -225,9 +213,15 @@ public class ACMDigitalLibraryScraper {
                 log.warn("[ACM] Fallo esperando botón 'Download now!': {}", e.getMessage());
             }
 
-            // Esperar descarga y renombrar
-            utils.downloadDelay();
-            dl.waitAndRenameLatestBib(cfg.getDownloadDirectory(), "ACM");
+            // Esperar descarga completa de acm.bib y renombrar de forma segura
+            try {
+                File renamed = dl.waitAndRenameSpecificBib(cfg.getDownloadDirectory(), "acm.bib", "ACM");
+                if (renamed == null) {
+                    log.warn("[ACM] No se encontró acm.bib para renombrar dentro del tiempo esperado");
+                }
+            } catch (Exception ex) {
+                log.warn("[ACM] Error esperando/renombrando acm.bib: {}", ex.getMessage());
+            }
 
         } catch (Exception e) {
             log.warn("[ACM] Fallo exportando: {}", e.getMessage());

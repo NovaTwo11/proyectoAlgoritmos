@@ -8,11 +8,13 @@ import co.edu.uniquindio.proyectoAlgoritmos.service.selenium.WebDriverService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openqa.selenium.WebDriver;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.util.Comparator;
 
 @Slf4j
 @Service
@@ -26,31 +28,45 @@ public class AutomationOrchestratorService {
     private final BibTeXUnificationService unifier;
 
 
-    public void downloadArticles(String query) {
+    public ResponseEntity<String> downloadArticles(String query) {
         WebDriver driver = null;
         try {
-            //driver = driverFactory.createChromeDriver();
-            //acm.download(driver, query);
-            //wos.download(driver, query);
+            String effectiveQuery = (query != null && !query.isBlank()) ? query : cfg.getSearchQuery();
+            String last = readLastQuery();
+            boolean sameQuery = last != null && last.equalsIgnoreCase(effectiveQuery);
+
+            if (!sameQuery) {
+                // Limpiar carpetas indicadas
+                cleanDir("src/main/resources/data/normalized");
+                cleanDir("src/main/resources/data/output");
+                cleanDir(cfg.getDownloadDirectory()); // src/main/resources/downloads
+                writeLastQuery(effectiveQuery);
+            } else {
+                log.info("La consulta es la misma que la última ejecutada; se omite limpieza de carpetas y descarga si ya existen archivos.");
+            }
+
+            boolean needsDownload = !sameQuery || isEmptyDir(cfg.getDownloadDirectory());
+            if (needsDownload) {
+                driver = driverFactory.createChromeDriver();
+                acm.download(driver, effectiveQuery);
+                wos.download(driver, effectiveQuery);
+            } else {
+                log.info("Se detectan archivos previos en {} y la búsqueda no cambió; saltando descarga.", cfg.getDownloadDirectory());
+            }
+            return ResponseEntity.ok("Proceso completado exitosamente.");
         } catch (Exception e) {
             log.error("Error durante la descarga de artículos: {}", e.getMessage(), e);
-            throw new RuntimeException(e);
+            return ResponseEntity.badRequest().body(e.getMessage());
         } finally {
             if (driver != null) try { driver.quit(); } catch (Exception ignore) {}
-            executeRequirement1();
+            downloadAll();
         }
     }
 
 
-    public void executeRequirement1() {
-        executeRequirement1(null);
-    }
 
-    public void executeRequirement1(String query) {
-        WebDriver d = null;
+    public void downloadAll () {
         try {
-            // Descargas (ACM / Web of Science) deben haberse realizado a cfg.getDownloadDirectory()
-
             // Directorio de salida principal: data/output
             String outDir = "src/main/resources/data/output";
             try {
@@ -67,8 +83,59 @@ public class AutomationOrchestratorService {
         } catch (Exception e) {
             log.error("Error ejecutando Requerimiento 1: {}", e.getMessage(), e);
             throw new RuntimeException(e);
-        } finally {
-            if (d != null) try { d.quit(); } catch (Exception ignore) {}
+        }
+    }
+
+    private String readLastQuery() {
+        try {
+            Path f = Paths.get("src/main/resources/data/last_query.txt");
+            if (Files.exists(f)) {
+                return Files.readString(f, StandardCharsets.UTF_8).trim();
+            }
+        } catch (Exception e) {
+            log.debug("No se pudo leer last_query.txt: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    private void writeLastQuery(String q) {
+        try {
+            Path dir = Paths.get("src/main/resources/data");
+            if (!Files.exists(dir)) Files.createDirectories(dir);
+            Path f = dir.resolve("last_query.txt");
+            Files.writeString(f, q == null ? "" : q, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            log.info("Última búsqueda persistida en {}", f.toAbsolutePath());
+        } catch (Exception e) {
+            log.warn("No se pudo escribir last_query.txt: {}", e.getMessage());
+        }
+    }
+
+    private void cleanDir(String dir) {
+        try {
+            Path p = Paths.get(dir);
+            if (!Files.exists(p)) { Files.createDirectories(p); return; }
+            try (var walk = Files.walk(p)) {
+                walk.sorted(Comparator.reverseOrder())
+                        .filter(pp -> !pp.equals(p)) // conservar el directorio raíz
+                        .forEach(pp -> {
+                            try { Files.deleteIfExists(pp); } catch (IOException ignore) {}
+                        });
+            }
+            log.info("Directorio limpiado: {}", p.toAbsolutePath());
+        } catch (Exception e) {
+            log.warn("No se pudo limpiar {}: {}", dir, e.getMessage());
+        }
+    }
+
+    private boolean isEmptyDir(String dir) {
+        try {
+            Path p = Paths.get(dir);
+            if (!Files.exists(p)) return true;
+            try (DirectoryStream<Path> ds = Files.newDirectoryStream(p)) {
+                return !ds.iterator().hasNext();
+            }
+        } catch (Exception e) {
+            return true;
         }
     }
 }
