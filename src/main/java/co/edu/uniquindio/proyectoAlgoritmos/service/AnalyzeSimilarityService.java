@@ -31,9 +31,6 @@ public class AnalyzeSimilarityService {
         algorithmRunResults.add(jaccardSimilarity.jaccardDistance(abstracts));
         algorithmRunResults.add(tfidfCosineSimilarity.tfidfCosineDistance(abstracts));
         algorithmRunResults.add(bm25Similarity.bm25Distance(abstracts));
-
-        log.info("Finished analyzing similarities");
-        log.info("Total de resultados: {}", algorithmRunResults.size());
         return ResponseEntity.ok(algorithmRunResults);
     }
 
