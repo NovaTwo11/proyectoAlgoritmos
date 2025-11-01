@@ -1,9 +1,11 @@
 package co.edu.uniquindio.proyectoAlgoritmos.controller;
 
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.ArticleDTO;
+import co.edu.uniquindio.proyectoAlgoritmos.model.dto.KeywordAnalysisResponse;
 import co.edu.uniquindio.proyectoAlgoritmos.service.AnalyzeSimilarityService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.ArticlesService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.AutomationOrchestratorService;
+import co.edu.uniquindio.proyectoAlgoritmos.service.KeywordAnalysisService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.dto.AlgorithmRunResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +21,7 @@ public class AutomationController {
     private final AutomationOrchestratorService orchestrator;
     private final ArticlesService articlesService;
     private final AnalyzeSimilarityService analyzeSimilarityService;
+    private final KeywordAnalysisService keywordAnalysisService;
 
     @PostMapping("/download-articles")
     public ResponseEntity<String> runReq1(@RequestParam(required = false) String query) {
@@ -35,5 +38,11 @@ public class AutomationController {
         return analyzeSimilarityService.analyzeSimilarities(articles);
     }
 
-
+    // Requerimiento 3 - sin parámetros: categoría y palabras están "quemadas" en el servicio
+    @GetMapping("/keyword-analysis")
+    public ResponseEntity<KeywordAnalysisResponse> analyzeKeywords() {
+        ResponseEntity<List<ArticleDTO>> articlesResp = articlesService.getArticles();
+        List<ArticleDTO> articles = articlesResp.getBody() != null ? articlesResp.getBody() : List.of();
+        return keywordAnalysisService.analyze(articles);
+    }
 }
