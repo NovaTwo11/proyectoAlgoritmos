@@ -9,6 +9,11 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class TermFrequency {
     private String term;
-    private int count;
+    private int frequency;
+
+    public TermFrequency(String key, Integer value) {
+        this.term = key;
+        this.frequency = value;
+    }
 }
 
