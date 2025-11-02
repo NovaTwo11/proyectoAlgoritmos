@@ -6,22 +6,26 @@ import co.edu.uniquindio.proyectoAlgoritmos.service.AnalyzeSimilarityService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.ArticlesService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.AutomationOrchestratorService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.KeywordAnalysisService;
+import co.edu.uniquindio.proyectoAlgoritmos.service.Requirement4OrchestratorService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.dto.AlgorithmRunResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
-@RestController
-@RequestMapping("/api/algoritmos")
 @RequiredArgsConstructor
+@RequestMapping("/api/algoritmos")
+@RestController
+@Slf4j
 public class AutomationController {
 
     private final AutomationOrchestratorService orchestrator;
     private final ArticlesService articlesService;
     private final AnalyzeSimilarityService analyzeSimilarityService;
     private final KeywordAnalysisService keywordAnalysisService;
+    private final Requirement4OrchestratorService r4;
 
     @PostMapping("/download-articles")
     public ResponseEntity<String> runReq1(@RequestParam(required = false) String query) {
@@ -44,5 +48,13 @@ public class AutomationController {
         ResponseEntity<List<ArticleDTO>> articlesResp = articlesService.getArticles();
         List<ArticleDTO> articles = articlesResp.getBody() != null ? articlesResp.getBody() : List.of();
         return keywordAnalysisService.analyze(articles);
+    }
+
+    // Requerimiento 4 - orchestrador (por ahora ejecuta Preprocesamiento y retorna su salida)
+    @GetMapping("/dendrograma")
+    public ResponseEntity<?> generateDendrogram() {
+        List<ArticleDTO> articles = articlesService.getArticles().getBody();
+        if (articles == null) articles = List.of();
+        return r4.run(articles);
     }
 }

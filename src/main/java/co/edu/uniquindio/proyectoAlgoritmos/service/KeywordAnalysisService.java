@@ -34,7 +34,7 @@ public class KeywordAnalysisService {
 
     public ResponseEntity<KeywordAnalysisResponse> analyze(List<ArticleDTO> articles) {
 
-        // 1) Frecuencia de palabras/frases asociadas (búsqueda literal insensible a mayúsculas/acentos)
+        // 1) Frecuencia de palabras asociadas (búsqueda literal insensible a mayúsculas/acentos)
         Map<String, Integer> givenFreq = countGivenKeywords(articles, GIVEN_KEYWORDS);
         List<TermFrequency> givenTF = toSortedTF(givenFreq);
 
@@ -42,10 +42,12 @@ public class KeywordAnalysisService {
         List<TermFrequency> discovered = discoverTopKeywords(articles, GIVEN_KEYWORDS, MAX_NEW_WORDS);
 
         // 3) Estimar precisión: porcentaje de nuevas que co-ocurren con palabras de la categoría en abstracts
-        double precision = estimatePrecision(discovered, GIVEN_KEYWORDS, articles);
+        PrecisionResult precisionResult = calculateDetailedPrecision(discovered, GIVEN_KEYWORDS, articles);
+        double precision = precisionResult.getOverallPrecision();
+
         String explanation = String.format(Locale.ROOT,
-                "Precisión calculada como co-ocurrencia: %.0f%% de %d términos nuevos aparecen en abstracts que contienen alguna palabra de la categoría.",
-                precision * 100.0, discovered.size());
+                "Precisión calculada como co-ocurrencia: %d de %d términos nuevos (%.0f%%) aparecen en abstracts que contienen alguna palabra de la categoría en al menos el 10%% de los artículos.",
+                precisionResult.getRelevantCount(), discovered.size(), precision * 100.0);
 
         KeywordAnalysisResponse resp = KeywordAnalysisResponse.builder()
                 .category(CATEGORY)
@@ -141,29 +143,94 @@ public class KeywordAnalysisService {
         return out;
     }
 
-    // --- Paso 3: precisión simple por co-ocurrencia ---
-    private double estimatePrecision(List<TermFrequency> discovered, List<String> givenKeywords, List<ArticleDTO> articles) {
-        if (discovered.isEmpty()) return 0.0;
-        Set<String> discoveredSet = discovered.stream().map(TermFrequency::getTerm).collect(Collectors.toSet());
-        int relevant = 0;
-        for (String term : discoveredSet) {
-            if (coOccursWithGiven(term, givenKeywords, articles)) relevant++;
+    // --- Paso 3: precisión mejorada con métricas detalladas ---
+    private PrecisionResult calculateDetailedPrecision(List<TermFrequency> discovered,
+                                                       List<String> givenKeywords,
+                                                       List<ArticleDTO> articles) {
+        PrecisionResult result = new PrecisionResult();
+
+        if (discovered.isEmpty()) {
+            result.setOverallPrecision(0.0);
+            return result;
         }
-        return relevant / (double) discoveredSet.size();
+
+        List<TermPrecision> termPrecisions = new ArrayList<>();
+        int relevantCount = 0;
+
+        for (TermFrequency termFreq : discovered) {
+            String term = termFreq.getTerm();
+            TermPrecision termPrecision = new TermPrecision();
+            termPrecision.setTerm(term);
+            termPrecision.setFrequency(termFreq.getFrequency());
+
+            // Calcular co-ocurrencia detallada
+            long cooccurrenceCount = calculateExactCooccurrence(term, givenKeywords, articles);
+            long totalWithTerm = calculateTotalWithTerm(term, articles);
+
+            termPrecision.setCooccurrenceCount(cooccurrenceCount);
+            termPrecision.setTotalWithTerm(totalWithTerm);
+
+            double cooccurrenceRatio = totalWithTerm > 0 ?
+                    (double) cooccurrenceCount / totalWithTerm : 0.0;
+            termPrecision.setCooccurrenceRatio(cooccurrenceRatio);
+
+            // Umbral: debe co-ocurrir en al menos 10% de los artículos
+            boolean isRelevant = cooccurrenceCount >= Math.max(1, articles.size() * 0.1);
+            termPrecision.setRelevant(isRelevant);
+
+            if (isRelevant) {
+                relevantCount++;
+            }
+
+            termPrecisions.add(termPrecision);
+        }
+
+        result.setTermPrecisions(termPrecisions);
+        result.setRelevantCount(relevantCount);
+        result.setTotalTerms(discovered.size());
+        result.setOverallPrecision(relevantCount / (double) discovered.size());
+
+        return result;
     }
 
-    private boolean coOccursWithGiven(String term, List<String> givenKeywords, List<ArticleDTO> articles) {
+    // --- Métodos de cálculo auxiliares para precisión ---
+    private long calculateExactCooccurrence(String term, List<String> givenKeywords, List<ArticleDTO> articles) {
         String t = normalizeText(term);
-        for (ArticleDTO a : articles) {
-            String abs = normalizeText(a.getAbstractText());
-            if (abs.isBlank()) continue;
-            if (!abs.contains(t)) continue;
-            for (String g : givenKeywords) {
-                String gn = normalizeText(g);
-                if (!gn.isBlank() && abs.contains(gn)) return true;
-            }
-        }
-        return false;
+        return articles.stream()
+                .filter(article ->
+                        containsTerm(article.getAbstractText(), t) &&
+                                containsAnyKeyword(article.getAbstractText(), givenKeywords)
+                )
+                .count();
+    }
+
+    private long calculateTotalWithTerm(String term, List<ArticleDTO> articles) {
+        String t = normalizeText(term);
+        return articles.stream()
+                .filter(article -> containsTerm(article.getAbstractText(), t))
+                .count();
+    }
+
+    private boolean containsTerm(String text, String term) {
+        if (text == null || term == null) return false;
+        return normalizeText(text).contains(term);
+    }
+
+    private boolean containsAnyKeyword(String text, List<String> keywords) {
+        if (text == null || keywords == null) return false;
+        String textNorm = normalizeText(text);
+        return keywords.stream()
+                .filter(keyword -> keyword != null)
+                .anyMatch(keyword -> textNorm.contains(normalizeText(keyword)));
+    }
+
+
+    private boolean coOccursWithGiven(String term, List<String> givenKeywords, List<ArticleDTO> articles) {
+        // Umbral: término debe co-ocurrir en al menos 10% de los artículos
+        int cooccurrenceThreshold = Math.max(1, (int) (articles.size() * 0.1));
+
+        long cooccurrenceCount = calculateExactCooccurrence(term, givenKeywords, articles);
+        return cooccurrenceCount >= cooccurrenceThreshold;
     }
 
     // --- utilidades de normalización ---
@@ -181,5 +248,52 @@ public class KeywordAnalysisService {
                 .sorted((a,b) -> Integer.compare(b.getValue(), a.getValue()))
                 .map(e -> new TermFrequency(e.getKey(), e.getValue()))
                 .toList();
+    }
+
+    // --- Clases de apoyo para resultados detallados ---
+    public static class PrecisionResult {
+        private double overallPrecision;
+        private int relevantCount;
+        private int totalTerms;
+        private List<TermPrecision> termPrecisions;
+
+        public double getOverallPrecision() { return overallPrecision; }
+        public void setOverallPrecision(double overallPrecision) { this.overallPrecision = overallPrecision; }
+
+        public int getRelevantCount() { return relevantCount; }
+        public void setRelevantCount(int relevantCount) { this.relevantCount = relevantCount; }
+
+        public int getTotalTerms() { return totalTerms; }
+        public void setTotalTerms(int totalTerms) { this.totalTerms = totalTerms; }
+
+        public List<TermPrecision> getTermPrecisions() { return termPrecisions; }
+        public void setTermPrecisions(List<TermPrecision> termPrecisions) { this.termPrecisions = termPrecisions; }
+    }
+
+    public static class TermPrecision {
+        private String term;
+        private int frequency;
+        private long cooccurrenceCount;
+        private long totalWithTerm;
+        private double cooccurrenceRatio;
+        private boolean relevant;
+
+        public String getTerm() { return term; }
+        public void setTerm(String term) { this.term = term; }
+
+        public int getFrequency() { return frequency; }
+        public void setFrequency(int frequency) { this.frequency = frequency; }
+
+        public long getCooccurrenceCount() { return cooccurrenceCount; }
+        public void setCooccurrenceCount(long cooccurrenceCount) { this.cooccurrenceCount = cooccurrenceCount; }
+
+        public long getTotalWithTerm() { return totalWithTerm; }
+        public void setTotalWithTerm(long totalWithTerm) { this.totalWithTerm = totalWithTerm; }
+
+        public double getCooccurrenceRatio() { return cooccurrenceRatio; }
+        public void setCooccurrenceRatio(double cooccurrenceRatio) { this.cooccurrenceRatio = cooccurrenceRatio; }
+
+        public boolean isRelevant() { return relevant; }
+        public void setRelevant(boolean relevant) { this.relevant = relevant; }
     }
 }
