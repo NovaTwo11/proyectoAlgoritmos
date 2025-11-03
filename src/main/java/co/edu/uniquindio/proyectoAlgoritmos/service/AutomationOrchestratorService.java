@@ -8,6 +8,7 @@ import co.edu.uniquindio.proyectoAlgoritmos.service.selenium.WebDriverService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openqa.selenium.WebDriver;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +28,9 @@ public class AutomationOrchestratorService {
     private final WebOfScienceScraper wos;
     private final BibTeXUnificationService unifier;
 
+    @Value("${automation.dendrogramas.output-dir:src/main/resources/data/dendrogramas}")
+    private String dendroOutDir;
+
 
     public ResponseEntity<String> downloadArticles(String query) {
         WebDriver driver = null;
@@ -40,6 +44,7 @@ public class AutomationOrchestratorService {
                 cleanDir("src/main/resources/data/normalized");
                 cleanDir("src/main/resources/data/output");
                 cleanDir(cfg.getDownloadDirectory()); // src/main/resources/downloads
+                cleanDir(dendroOutDir); // limpiar también dendrogramas
                 writeLastQuery(effectiveQuery);
             } else {
                 log.info("La consulta es la misma que la última ejecutada; se omite limpieza de carpetas y descarga si ya existen archivos.");

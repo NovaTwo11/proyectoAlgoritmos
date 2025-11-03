@@ -1,5 +1,6 @@
 package co.edu.uniquindio.proyectoAlgoritmos.model.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,7 +14,7 @@ import java.util.List;
 @AllArgsConstructor
 public class SimilarityResponse {
     private List<String> labels;             // etiquetas usadas (títulos o ids)
-    private double[][] distancesEuclidean;   // matriz NxN de distancias euclidianas
+    @JsonIgnore
+    private double[][] distancesEuclidean;   // matriz NxN de distancias euclidianas (no serializar)
     private List<SimilarityPairDTO> topSimilar; // top pares por similitud coseno
 }
-

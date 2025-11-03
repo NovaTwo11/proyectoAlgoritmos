@@ -2,11 +2,7 @@ package co.edu.uniquindio.proyectoAlgoritmos.controller;
 
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.ArticleDTO;
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.KeywordAnalysisResponse;
-import co.edu.uniquindio.proyectoAlgoritmos.service.AnalyzeSimilarityService;
-import co.edu.uniquindio.proyectoAlgoritmos.service.ArticlesService;
-import co.edu.uniquindio.proyectoAlgoritmos.service.AutomationOrchestratorService;
-import co.edu.uniquindio.proyectoAlgoritmos.service.KeywordAnalysisService;
-import co.edu.uniquindio.proyectoAlgoritmos.service.Requirement4OrchestratorService;
+import co.edu.uniquindio.proyectoAlgoritmos.service.*;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.dto.AlgorithmRunResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -50,7 +46,7 @@ public class AutomationController {
         return keywordAnalysisService.analyze(articles);
     }
 
-    // Requerimiento 4 - orchestrador (por ahora ejecuta Preprocesamiento y retorna su salida)
+    // Requerimiento 4 - retorna las 3 imágenes (single, complete, average) en base64 + filePath
     @GetMapping("/dendrograma")
     public ResponseEntity<?> generateDendrogram() {
         List<ArticleDTO> articles = articlesService.getArticles().getBody();
