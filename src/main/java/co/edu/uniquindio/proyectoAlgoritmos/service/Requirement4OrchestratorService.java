@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import java.nio.file.*;
+import java.io.IOException;
 import java.util.*;
 
 @Service
@@ -24,6 +26,9 @@ public class Requirement4OrchestratorService {
     private String dendroOutDir;
 
     public ResponseEntity<?> run(List<ArticleDTO> articles) {
+        // Limpiar carpeta de dendrogramas antes de procesar
+        try { cleanDir(dendroOutDir); } catch (Exception ignore) {}
+
         // Paso 1: preprocesamiento
         ResponseEntity<PreprocessingResponse> preproc = preprocessingPipelineService.preprocessArticles(articles);
         PreprocessingResponse body = preproc.getBody();
@@ -58,5 +63,19 @@ public class Requirement4OrchestratorService {
                 "average", Map.of("base64", rAverage.base64, "filePath", rAverage.filePath)
         ));
         return ResponseEntity.ok(out);
+    }
+
+    private void cleanDir(String dir) {
+        try {
+            Path p = Paths.get(dir);
+            if (!Files.exists(p)) { Files.createDirectories(p); return; }
+            try (var walk = Files.walk(p)) {
+                walk.sorted(java.util.Comparator.reverseOrder())
+                        .filter(pp -> !pp.equals(p))
+                        .forEach(pp -> { try { Files.deleteIfExists(pp); } catch (IOException ignore) {} });
+            }
+        } catch (Exception e) {
+            // no interrumpir el flujo por errores de limpieza
+        }
     }
 }
