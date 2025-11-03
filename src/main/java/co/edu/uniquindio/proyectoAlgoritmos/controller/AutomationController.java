@@ -22,6 +22,8 @@ public class AutomationController {
     private final AnalyzeSimilarityService analyzeSimilarityService;
     private final KeywordAnalysisService keywordAnalysisService;
     private final Requirement4OrchestratorService r4;
+    private final CitationGraphService citationGraphService;
+    private final CitationGraphRendererService citationGraphRendererService;
 
     @PostMapping("/download-articles")
     public ResponseEntity<String> runReq1(@RequestParam(required = false) String query) {
@@ -53,4 +55,37 @@ public class AutomationController {
         if (articles == null) articles = List.of();
         return r4.run(articles);
     }
+
+    /**
+     * Seguimiento 2
+     */
+
+    // Requerimiento 1 - construir grafo de citaciones (inferidas por similitud)
+    @PostMapping("/citations/build")
+    public ResponseEntity<?> buildCitationGraph(@RequestParam(required = false) Double threshold) {
+        var result = citationGraphService.build(threshold);
+        var export = citationGraphService.exportRelationships();
+        // Generar imagen como efecto colateral (no se retorna base64)
+        var render = citationGraphRendererService.renderGraph(null);
+        return ResponseEntity.ok(java.util.Map.of(
+                "graph", result,
+                "relationships", export,
+                "image", java.util.Map.of(
+                        "filePath", render.filePath
+                )
+        ));
+    }
+
+    // Requerimiento 1 - camino mínimo (Dijkstra) entre dos artículos (ids)
+    @GetMapping("/citations/shortest")
+    public ResponseEntity<CitationGraphService.PathResult> shortestPath(@RequestParam String sourceId, @RequestParam String targetId) {
+        return ResponseEntity.ok(citationGraphService.shortestPath(sourceId, targetId));
+    }
+
+    // Requerimiento 1 - componentes (débiles y fuertes)
+    @GetMapping("/citations/components")
+    public ResponseEntity<CitationGraphService.Components> components() {
+        return ResponseEntity.ok(citationGraphService.components());
+    }
+
 }
