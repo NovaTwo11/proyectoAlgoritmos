@@ -77,6 +77,7 @@ public class SimilarityService {
                 .labels(labels)
                 .distancesEuclidean(eu)
                 .topSimilar(pairs.stream().limit(50).collect(Collectors.toList()))
+                .tfidfVectors(vecs)
                 .build();
     }
 

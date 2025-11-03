@@ -219,6 +219,7 @@ public class CitationGraphService {
 
     // --- Componentes ---
     public Components components() {
+        // Componentes débiles (convirtiendo a no dirigido)
         Map<String, List<String>> und = new HashMap<>();
         for (String u : adj.keySet()) und.put(u, new ArrayList<>());
         for (Map.Entry<String, List<Edge>> en : adj.entrySet()) {
@@ -236,22 +237,60 @@ public class CitationGraphService {
             }
             weak.add(comp);
         }
-        List<String> order = new ArrayList<>();
-        Set<String> vis = new HashSet<>();
-        for (String v : adj.keySet()) if (!vis.contains(v)) dfs1(v, vis, order);
-        Map<String, List<String>> radj = new HashMap<>();
-        for (String u : adj.keySet()) radj.put(u, new ArrayList<>());
-        for (Map.Entry<String, List<Edge>> en : adj.entrySet())
-            for (Edge e : en.getValue()) radj.get(e.getTo()).add(en.getKey());
-        List<List<String>> strong = new ArrayList<>();
-        Collections.reverse(order);
-        vis.clear();
-        for (String v : order) if (!vis.contains(v)) {
-            List<String> comp = new ArrayList<>();
-            dfs2(v, vis, comp, radj);
-            strong.add(comp);
-        }
+
+        // Componentes fuertemente conexas con Tarjan
+        List<List<String>> strong = tarjanSCC();
         return new Components(weak, strong);
+    }
+
+    // Implementación de Tarjan para SCC
+    private List<List<String>> tarjanSCC() {
+        Map<String, Integer> index = new HashMap<>();
+        Map<String, Integer> lowlink = new HashMap<>();
+        Deque<String> stack = new ArrayDeque<>();
+        Set<String> onStack = new HashSet<>();
+        List<List<String>> sccs = new ArrayList<>();
+        final int[] idx = {0};
+
+        for (String v : adj.keySet()) {
+            if (!index.containsKey(v)) strongConnect(v, index, lowlink, stack, onStack, sccs, idx);
+        }
+        return sccs;
+    }
+
+    private void strongConnect(String v,
+                               Map<String, Integer> index,
+                               Map<String, Integer> lowlink,
+                               Deque<String> stack,
+                               Set<String> onStack,
+                               List<List<String>> sccs,
+                               int[] idx) {
+        index.put(v, idx[0]);
+        lowlink.put(v, idx[0]);
+        idx[0]++;
+        stack.push(v);
+        onStack.add(v);
+
+        for (Edge e : adj.getOrDefault(v, List.of())) {
+            String w = e.getTo();
+            if (!index.containsKey(w)) {
+                strongConnect(w, index, lowlink, stack, onStack, sccs, idx);
+                lowlink.put(v, Math.min(lowlink.get(v), lowlink.get(w)));
+            } else if (onStack.contains(w)) {
+                lowlink.put(v, Math.min(lowlink.get(v), index.get(w)));
+            }
+        }
+
+        if (Objects.equals(lowlink.get(v), index.get(v))) {
+            List<String> comp = new ArrayList<>();
+            String w;
+            do {
+                w = stack.pop();
+                onStack.remove(w);
+                comp.add(w);
+            } while (!w.equals(v));
+            sccs.add(comp);
+        }
     }
 
     private void dfs1(String v, Set<String> vis, List<String> order) {
