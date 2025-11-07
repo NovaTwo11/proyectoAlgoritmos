@@ -3,6 +3,7 @@ package co.edu.uniquindio.proyectoAlgoritmos.service.algorithms;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.text.Normalizer;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -10,7 +11,8 @@ import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.dto.AlgorithmPair
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.dto.AlgorithmRunResult;
 
 /**
- * Utilidades para calcular distancia y similitud (normalizada) entre cadenas usando Levenshtein.
+ * Distancia y similitud entre cadenas usando Levenshtein (carácter a carácter),
+ * con normalización Unicode (lower + NFKD sin diacríticos + colapso de espacios).
  */
 @Slf4j
 @Service
@@ -18,17 +20,10 @@ public class LevenshteinSimilarity {
 
     // --- API para front con ids ---
 
-    /**
-     * Entrada id->texto (abstract). Internamente se procesa por índices (i<j),
-     * y se devuelven los ids solamente en la respuesta para el front.
-     */
     public AlgorithmRunResult levenshteinDistance(Map<String, String> idToText) {
         return compareAll(idToText);
     }
 
-    /**
-     * API estándar: recibe un mapa id->texto y retorna resultados comparados por pares con ids.
-     */
     public AlgorithmRunResult compareAll(Map<String, String> idToText) {
         long t0 = System.currentTimeMillis();
         if (idToText == null || idToText.isEmpty()) {
@@ -39,9 +34,10 @@ public class LevenshteinSimilarity {
                     .results(Collections.emptyList())
                     .build();
         }
-        // materializar entradas y normalizar nulos a ""
+
+        // Materializar entradas, normalizar nulos y aplicar normalización Unicode
         List<Map.Entry<String,String>> entries = idToText.entrySet().stream()
-                .map(e -> Map.entry(e.getKey(), e.getValue() == null ? "" : e.getValue()))
+                .map(e -> Map.entry(e.getKey(), normalize(Objects.toString(e.getValue(), ""))))
                 .collect(Collectors.toList());
 
         List<AlgorithmPairResult> results = new ArrayList<>();
@@ -51,21 +47,23 @@ public class LevenshteinSimilarity {
                 String idB = entries.get(j).getKey();
                 String a = entries.get(i).getValue();
                 String b = entries.get(j).getValue();
+
                 long t1 = System.nanoTime();
-                int d = distance(a, b);
+                int d = distance(a, b);                         // exacto O(n·m)
                 double s = similarityFromDistance(d, a.length(), b.length());
                 long t2 = System.nanoTime();
+
                 results.add(AlgorithmPairResult.builder()
                         .idA(idA)
                         .idB(idB)
-                        .distance(d)
-                        .score(s)
-                        .similarityPercent(Math.round(s * 10000.0) / 100.0) // dos decimales
+                        .distance(d)                              // distancia cruda (entera)
+                        .score(s)                                 // similitud [0,1]
+                        .similarityPercent(Math.round(s * 10000.0) / 100.0)
                         .timeMs(Math.max(0L, (t2 - t1) / 1_000_000L))
                         .build());
             }
         }
-        // ordenar por score desc, luego por idA, idB
+
         results.sort(Comparator
                 .comparingDouble(AlgorithmPairResult::getScore).reversed()
                 .thenComparing(AlgorithmPairResult::getIdA)
@@ -83,44 +81,27 @@ public class LevenshteinSimilarity {
     // --- API por índices (útil internamente o pruebas) ---
 
     public static class Result {
-        public final int i;          // índice primera cadena
-        public final int j;          // índice segunda cadena
-        public final String a;       // valor i
-        public final String b;       // valor j
-        public final int distance;   // distancia de Levenshtein
-        public final double score;   // similitud normalizada [0..1]
-
+        public final int i, j;
+        public final String a, b;
+        public final int distance;
+        public final double score;
         public Result(int i, int j, String a, String b, int distance, double score) {
-            this.i = i;
-            this.j = j;
-            this.a = a;
-            this.b = b;
-            this.distance = distance;
-            this.score = score;
+            this.i = i; this.j = j; this.a = a; this.b = b; this.distance = distance; this.score = score;
         }
-
         @Override public String toString() {
-            return "Result{" +
-                    "i=" + i +
-                    ", j=" + j +
-                    ", distance=" + distance +
-                    ", score=" + score +
-                    ", a='" + a + '\'' +
-                    ", b='" + b + '\'' +
-                    '}';
+            return "Result{i=" + i + ", j=" + j + ", distance=" + distance + ", score=" + score + "}";
         }
     }
 
     public List<Result> similarities(List<String> values) {
         if (values == null || values.isEmpty()) return Collections.emptyList();
         List<String> list = new ArrayList<>(values.size());
-        for (String v : values) list.add(v == null ? "" : v);
+        for (String v : values) list.add(normalize(Objects.toString(v, "")));
 
         List<Result> out = new ArrayList<>();
         for (int i = 0; i < list.size(); i++) {
             for (int j = i + 1; j < list.size(); j++) {
-                String a = list.get(i);
-                String b = list.get(j);
+                String a = list.get(i), b = list.get(j);
                 int d = distance(a, b);
                 double s = similarityFromDistance(d, a.length(), b.length());
                 out.add(new Result(i, j, a, b, d, s));
@@ -137,7 +118,7 @@ public class LevenshteinSimilarity {
         int n = values.size();
         double[][] M = new double[n][n];
         List<String> list = new ArrayList<>(n);
-        for (String v : values) list.add(Objects.toString(v, ""));
+        for (String v : values) list.add(normalize(Objects.toString(v, "")));
         for (int i = 0; i < n; i++) M[i][i] = 1.0;
         for (int i = 0; i < n; i++) {
             for (int j = i + 1; j < n; j++) {
@@ -149,14 +130,20 @@ public class LevenshteinSimilarity {
         return M;
     }
 
+    // --- núcleo Levenshtein exacto O(n·m) con memoria O(m) ---
+
     public static int distance(String a, String b) {
         if (a == null) a = "";
         if (b == null) b = "";
-        int n = a.length();
-        int m = b.length();
+        int n = a.length(), m = b.length();
         if (n == 0) return m;
         if (m == 0) return n;
-        if (n > m) { String t = a; a = b; b = t; int tmp = n; n = m; m = tmp; }
+
+        // Asegura n ≤ m para minimizar memoria
+        if (n > m) {
+            String t = a; a = b; b = t;
+            int tmp = n; n = m; m = tmp;
+        }
 
         int[] prev = new int[m + 1];
         int[] curr = new int[m + 1];
@@ -171,25 +158,41 @@ public class LevenshteinSimilarity {
                 int del = prev[j] + 1;
                 int ins = curr[j - 1] + 1;
                 int sub = prev[j - 1] + cost;
-                curr[j] = Math.min(Math.min(del, ins), sub);
+                // min3
+                int v = del < ins ? del : ins;
+                curr[j] = v < sub ? v : sub;
             }
+            // swap filas
             int[] t = prev; prev = curr; curr = t;
         }
         return prev[m];
     }
 
     public static double similarity(String a, String b) {
-        if (a == null) a = "";
-        if (b == null) b = "";
+        a = normalize(Objects.toString(a, ""));
+        b = normalize(Objects.toString(b, ""));
         int d = distance(a, b);
         return similarityFromDistance(d, a.length(), b.length());
     }
 
     private static double similarityFromDistance(int distance, int lenA, int lenB) {
         int max = Math.max(lenA, lenB);
-        if (max == 0) return 1.0;
+        if (max == 0) return 1.0;          // ambas vacías
         double s = 1.0 - (distance / (double) max);
-        if (s < 0) s = 0.0;
-        return s;
+        return (s < 0) ? 0.0 : s;
+    }
+
+    // --- normalización sugerida para español/inglés ---
+
+    private static String normalize(String s) {
+        if (s == null) return "";
+        // lower + NFKD + quitar diacríticos + colapsar espacios
+        String lowered = s.toLowerCase(Locale.ROOT).trim();
+        String nfkd = Normalizer.normalize(lowered, Normalizer.Form.NFKD);
+        String withoutDiacritics = nfkd.replaceAll("\\p{M}", "");
+        // opcional: quitar caracteres no imprimibles
+        String cleaned = withoutDiacritics.replaceAll("[\\p{Cntrl}]", " ");
+        // colapsa espacios múltiples
+        return cleaned.replaceAll("\\s+", " ").trim();
     }
 }

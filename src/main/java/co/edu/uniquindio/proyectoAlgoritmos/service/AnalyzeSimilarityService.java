@@ -1,10 +1,10 @@
 package co.edu.uniquindio.proyectoAlgoritmos.service;
 
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.ArticleDTO;
+import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.BM25CosineSimilarity;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.LevenshteinSimilarity;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.JaccardSimilarity;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.TFIDFCosineSimilarity;
-import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.BM25Similarity;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.dto.AlgorithmRunResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +21,7 @@ public class AnalyzeSimilarityService {
     private final LevenshteinSimilarity levenshteinSimilarity;
     private final JaccardSimilarity jaccardSimilarity;
     private final TFIDFCosineSimilarity tfidfCosineSimilarity;
-    private final BM25Similarity bm25Similarity;
+    private final BM25CosineSimilarity bm25Similarity;
 
     public ResponseEntity<List<AlgorithmRunResult>> analyzeSimilarities(List<ArticleDTO> articles) {
         List<AlgorithmRunResult> algorithmRunResults = new ArrayList<>();
@@ -30,7 +30,7 @@ public class AnalyzeSimilarityService {
         algorithmRunResults.add(levenshteinSimilarity.levenshteinDistance(abstracts));
         algorithmRunResults.add(jaccardSimilarity.jaccardDistance(abstracts));
         algorithmRunResults.add(tfidfCosineSimilarity.tfidfCosineDistance(abstracts));
-        algorithmRunResults.add(bm25Similarity.bm25Distance(abstracts));
+        algorithmRunResults.add(bm25Similarity.bm25CosineDistance(abstracts));
         return ResponseEntity.ok(algorithmRunResults);
     }
 

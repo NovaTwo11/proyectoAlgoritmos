@@ -26,7 +26,6 @@ public class AutomationController {
     private final CitationGraphRendererService citationGraphRendererService;
     private final CooccurrenceGraphService cooccurrenceGraphService;
     private final CooccurrenceGraphRendererService cooccurrenceGraphRendererService;
-    // Servicios usados por /coocurrence/build-fixed
     private final PreprocessingPipelineService preprocessingPipelineService;
     private final SimilarityService similarityService;
     private final HierarchicalClusteringCore hclust;
@@ -100,6 +99,7 @@ public class AutomationController {
         return ResponseEntity.ok(buildCooccurrenceR3R4());
     }
 
+    // Requerimiento 2 (Seguimiento 2)
     // Variante explícita: construir con vocabulario fijo (R3 + R4)
     @PostMapping("/coocurrence/build-fixed")
     public ResponseEntity<?> buildCooccurrenceFixed() {
