@@ -4,6 +4,7 @@ import co.edu.uniquindio.proyectoAlgoritmos.model.dto.ArticleDTO;
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.PreprocessedArticleDTO;
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.PreprocessingResponse;
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.SimilarityResponse;
+import co.edu.uniquindio.proyectoAlgoritmos.util.DendroMetrics;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -26,10 +27,10 @@ public class Requirement4OrchestratorService {
     private String dendroOutDir;
 
     public ResponseEntity<?> run(List<ArticleDTO> articles) {
-        // Limpiar carpeta de dendrogramas antes de procesar
+        // 0) Limpiar carpeta de salida (opcional, mantiene guardado en disco)
         try { cleanDir(dendroOutDir); } catch (Exception ignore) {}
 
-        // Paso 1: preprocesamiento
+        // 1) Preprocesamiento
         ResponseEntity<PreprocessingResponse> preproc = preprocessingPipelineService.preprocessArticles(articles);
         PreprocessingResponse body = preproc.getBody();
         if (body == null || body.getArticles() == null || body.getArticles().isEmpty()) {
@@ -37,7 +38,7 @@ public class Requirement4OrchestratorService {
         }
         List<PreprocessedArticleDTO> pre = body.getArticles();
 
-        // Paso 2: similitud (TF-IDF + coseno y distancias euclidianas)
+        // 2) Similitud/Distancias (TF-IDF + coseno; matriz de distancias euclidianas)
         SimilarityResponse sim = similarityService.computeTfidfCosineAndEuclidean(pre);
         double[][] d = sim.getDistancesEuclidean();
         List<String> labels = sim.getLabels();
@@ -45,25 +46,60 @@ public class Requirement4OrchestratorService {
             return ResponseEntity.ok(Map.of("message", "No fue posible calcular distancias"));
         }
 
-        // Paso 3: clustering (single, complete, average)
-        var single = hclust.agglomerate(d, HierarchicalClusteringCore.Linkage.SINGLE);
+        // 3) Clustering jerárquico (single, complete, average)
+        var single   = hclust.agglomerate(d, HierarchicalClusteringCore.Linkage.SINGLE);
         var complete = hclust.agglomerate(d, HierarchicalClusteringCore.Linkage.COMPLETE);
-        var average = hclust.agglomerate(d, HierarchicalClusteringCore.Linkage.AVERAGE);
+        var average  = hclust.agglomerate(d, HierarchicalClusteringCore.Linkage.AVERAGE);
 
-        // Renderizar y guardar las imágenes
-        var rSingle = renderer.renderAndSaveBase64(single, labels, dendroOutDir, "dendro_single");
+        // 4) Métrica de coherencia (Cophenetic Correlation Coefficient - CCC)
+        double cccSingle   = DendroMetrics.copheneticCorrelation(d, single);
+        double cccComplete = DendroMetrics.copheneticCorrelation(d, complete);
+        double cccAverage  = DendroMetrics.copheneticCorrelation(d, average);
+
+        String best = (cccSingle >= cccComplete && cccSingle >= cccAverage) ? "single"
+                : (cccComplete >= cccAverage ? "complete" : "average");
+
+        // 5) Render a PNG base64 (y guardar en disco en paralelo)
+        var rSingle   = renderer.renderAndSaveBase64(single,   labels, dendroOutDir, "dendro_single");
         var rComplete = renderer.renderAndSaveBase64(complete, labels, dendroOutDir, "dendro_complete");
-        var rAverage = renderer.renderAndSaveBase64(average, labels, dendroOutDir, "dendro_average");
+        var rAverage  = renderer.renderAndSaveBase64(average,  labels, dendroOutDir, "dendro_average");
 
-        Map<String,Object> out = new LinkedHashMap<>();
+        // 6) Respuesta para el front (Vite + Vue): data URIs + paths guardados + métricas
+        Map<String, Object> out = new LinkedHashMap<>();
         out.put("format", "png-base64");
+        out.put("labels", labels);
         out.put("images", Map.of(
-                "single", Map.of("base64", rSingle.base64, "filePath", rSingle.filePath),
-                "complete", Map.of("base64", rComplete.base64, "filePath", rComplete.filePath),
-                "average", Map.of("base64", rAverage.base64, "filePath", rAverage.filePath)
+                "single",   Map.of(
+                        "dataUri",  "data:image/png;base64," + rSingle.base64,
+                        "filePath", rSingle.filePath
+                ),
+                "complete", Map.of(
+                        "dataUri",  "data:image/png;base64," + rComplete.base64,
+                        "filePath", rComplete.filePath
+                ),
+                "average",  Map.of(
+                        "dataUri",  "data:image/png;base64," + rAverage.base64,
+                        "filePath", rAverage.filePath
+                )
         ));
+        out.put("metrics", Map.of(
+                "cophenetic", Map.of(
+                        "single",   cccSingle,
+                        "complete", cccComplete,
+                        "average",  cccAverage
+                ),
+                "best", best
+        ));
+        // Información adicional útil para UI/depuración
+        out.put("distance", Map.of(
+                "type", "euclidean",
+                "space", "TF-IDF L2-normalized"
+        ));
+        out.put("linkages", List.of("single", "complete", "average"));
+
         return ResponseEntity.ok(out);
     }
+
 
     private void cleanDir(String dir) {
         try {
