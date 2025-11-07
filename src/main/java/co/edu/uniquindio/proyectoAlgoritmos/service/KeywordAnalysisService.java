@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 @Service
 public class KeywordAnalysisService {
 
-    // Categoría y palabras asociadas "quemadas" (hardcoded)
+    // Categoría y palabras asociadas (hardcoded según el requerimiento)
     private static final String CATEGORY = "Concepts of Generative AI in Education";
     private static final List<String> GIVEN_KEYWORDS = Arrays.asList(
             "Generative models", "Prompting", "Machine learning", "Multimodality",
@@ -22,26 +22,34 @@ public class KeywordAnalysisService {
             "Transparency", "Ethics", "Privacy", "Personalization",
             "Human-AI interaction", "AI literacy", "Co-creation"
     );
+
     private static final int MAX_NEW_WORDS = 15;
 
+    // Stopwords mínimas ES/EN (amplía según tu corpus)
     private static final Set<String> STOP_WORDS = new HashSet<>(Arrays.asList(
-            // Español + inglés básico, se pueden ampliar
+            // Español
             "a","ante","bajo","cabe","con","contra","de","desde","en","entre","hacia","hasta","para","por","segun","sin","so","sobre","tras",
-            "el","la","los","las","un","una","unos","unas","y","o","u","e","que","como","se","su","sus","es","son","fue","fueron","ser","esta","está","están","estamos","estudio","paper","study","the","and","or","of","to","in","on","for","with","by","an","as","at","from","this","that","these","those","we","our","their","it","its","be","are","is","was","were","have","has","had","can","could","may","might","into","across","using","use","used","via","results","result","show","shows","find","finds","analysis","method","methods","data","based","approach","approaches","model","models","paper","study"
+            "el","la","los","las","un","una","unos","unas","y","o","u","e","que","como","se","su","sus","es","son","fue","fueron","ser","esta","está","están","estamos",
+            // Inglés y términos genéricos de papers
+            "the","and","or","of","to","in","on","for","with","by","an","as","at","from","this","that","these","those","we","our","their",
+            "it","its","be","are","is","was","were","have","has","had","can","could","may","might",
+            "into","across","using","use","used","via","results","result","show","shows","find","finds",
+            "analysis","method","methods","data","based","approach","approaches","model","models","paper","study"
     ));
 
+    // Separador léxico: todo lo que NO sea [a-z0-9+]
     private static final Pattern TOKEN_SPLIT = Pattern.compile("[^a-z0-9+]+");
 
     public ResponseEntity<KeywordAnalysisResponse> analyze(List<ArticleDTO> articles) {
 
-        // 1) Frecuencia de palabras asociadas (búsqueda literal insensible a mayúsculas/acentos)
+        // 1) Frecuencia de palabras/frases dadas (coincidencia por término/frase, sin subcadenas)
         Map<String, Integer> givenFreq = countGivenKeywords(articles, GIVEN_KEYWORDS);
         List<TermFrequency> givenTF = toSortedTF(givenFreq);
 
-        // 2) Extraer nuevas palabras: usar TF-IDF simple por tokens, filtrar stop words y tokens cortos
+        // 2) Descubrir nuevas palabras/frases con TF-IDF sobre uni/bi/tri-gramas
         List<TermFrequency> discovered = discoverTopKeywords(articles, GIVEN_KEYWORDS, MAX_NEW_WORDS);
 
-        // 3) Estimar precisión: porcentaje de nuevas que co-ocurren con palabras de la categoría en abstracts
+        // 3) Estimar precisión por co-ocurrencia (≥10% de los artículos)
         PrecisionResult precisionResult = calculateDetailedPrecision(discovered, GIVEN_KEYWORDS, articles);
         double precision = precisionResult.getOverallPrecision();
 
@@ -60,7 +68,8 @@ public class KeywordAnalysisService {
         return ResponseEntity.ok(resp);
     }
 
-    // --- Paso 1: frecuencia de las palabras/frases dadas ---
+    // =========================== Paso 1: Frecuencia de keywords dadas ===========================
+
     private Map<String, Integer> countGivenKeywords(List<ArticleDTO> articles, List<String> givenKeywords) {
         Map<String, Integer> freq = new LinkedHashMap<>();
         for (String kw : givenKeywords) freq.put(kw, 0);
@@ -69,65 +78,79 @@ public class KeywordAnalysisService {
             String abs = normalizeText(a.getAbstractText());
             if (abs.isBlank()) continue;
             for (String kw : givenKeywords) {
-                String pat = normalizeText(kw);
-                if (pat.isBlank()) continue;
-                int count = countOccurrences(abs, pat);
+                int count = countOccurrences(abs, normalizeText(kw));
                 if (count > 0) freq.put(kw, freq.getOrDefault(kw, 0) + count);
             }
         }
         return freq;
     }
 
-    private int countOccurrences(String text, String needle) {
-        int c = 0, idx = 0;
-        while ((idx = text.indexOf(needle, idx)) >= 0) {
-            c++; idx += needle.length();
-        }
+    /**
+     * Cuenta ocurrencias de una aguja (ya normalizada) en un texto normalizado,
+     * asegurando bordes léxicos: inicio/fin o separado por no [a-z0-9+].
+     */
+    private int countOccurrences(String normalizedText, String normalizedNeedle) {
+        if (normalizedText == null || normalizedNeedle == null || normalizedNeedle.isBlank()) return 0;
+        String n = Pattern.quote(normalizedNeedle);
+        // Bordes léxicos: lookbehind/lookahead para ^ o separador, y $ o separador
+        Pattern p = Pattern.compile("(?:(?<=^)|(?<=[^a-z0-9+]))" + n + "(?:(?=$)|(?=[^a-z0-9+]))");
+        var m = p.matcher(normalizedText);
+        int c = 0;
+        while (m.find()) c++;
         return c;
     }
 
-    // --- Paso 2: descubrimiento de términos con TF-IDF simple ---
+    // =========================== Paso 2: Descubrimiento TF-IDF (uni/bi/tri) ===========================
+
     private List<TermFrequency> discoverTopKeywords(List<ArticleDTO> articles, List<String> givenKeywords, int maxNew) {
-        // Preparar documentos tokenizados
-        List<List<String>> docs = new ArrayList<>();
+        // Preparar documentos (lista de términos por doc): tokens (unigrama) -> generar bigramas y trigramas
+        List<List<String>> docsTerms = new ArrayList<>();
         for (ArticleDTO a : articles) {
             String abs = normalizeText(a.getAbstractText());
             if (abs.isBlank()) continue;
+
+            // Unigrama (filtra stopwords y tokens cortos)
             List<String> tokens = Arrays.stream(TOKEN_SPLIT.split(abs))
                     .filter(t -> !t.isBlank())
                     .filter(t -> t.length() > 2)
                     .filter(t -> !STOP_WORDS.contains(t))
                     .toList();
-            docs.add(tokens);
-        }
-        if (docs.isEmpty()) return List.of();
 
-        // DF (document frequency)
+            if (tokens.isEmpty()) continue;
+
+            // Agregar uni + bi + tri (bi/tri se forman desde tokens ya filtrados)
+            List<String> terms = toNgrams(tokens);
+            docsTerms.add(terms);
+        }
+        if (docsTerms.isEmpty()) return List.of();
+
+        // DF por término
         Map<String, Integer> df = new HashMap<>();
-        for (List<String> doc : docs) {
-            Set<String> unique = new HashSet<>(doc);
+        for (List<String> terms : docsTerms) {
+            Set<String> unique = new HashSet<>(terms);
             for (String t : unique) df.merge(t, 1, Integer::sum);
         }
-        int N = docs.size();
+        int N = docsTerms.size();
 
-        // TF-IDF acumulado (suma TF-IDF por documento)
+        // TF-IDF acumulado (suma por documento de log1p(tf) * idf_suavizado)
         Map<String, Double> tfidf = new HashMap<>();
-        Map<String, Integer> totalCounts = new HashMap<>();
-        for (List<String> doc : docs) {
-            Map<String, Long> tf = doc.stream().collect(Collectors.groupingBy(s -> s, Collectors.counting()));
+        Map<String, Integer> totalCounts = new HashMap<>(); // frecuencia total de aparición (para mostrar)
+        for (List<String> terms : docsTerms) {
+            Map<String, Long> tf = terms.stream().collect(Collectors.groupingBy(s -> s, Collectors.counting()));
             for (Map.Entry<String, Long> e : tf.entrySet()) {
                 String term = e.getKey();
-                double tfVal = e.getValue();
-                double idf = Math.log((N + 1.0) / (df.getOrDefault(term, 1)));
-                tfidf.merge(term, tfVal * idf, Double::sum);
+                int dfi = Math.max(1, df.getOrDefault(term, 1));
+                double idf = Math.log((N + 1.0) / (dfi + 1.0)) + 1.0; // idf estable
+                double tfWeight = Math.log1p(e.getValue());           // tf sublineal
+                tfidf.merge(term, tfWeight * idf, Double::sum);
                 totalCounts.merge(term, e.getValue().intValue(), Integer::sum);
             }
         }
 
-        // Excluir términos que ya están en las palabras dadas (normalizados)
+        // Excluir términos que ya están dados (normalizados)
         Set<String> givenNorm = givenKeywords.stream().map(this::normalizeText).collect(Collectors.toSet());
 
-        // Ord. por TF-IDF desc y tomar top
+        // Top-K por TF-IDF descendente
         List<String> topTerms = tfidf.entrySet().stream()
                 .filter(e -> !givenNorm.contains(e.getKey()))
                 .sorted((a,b) -> Double.compare(b.getValue(), a.getValue()))
@@ -135,7 +158,7 @@ public class KeywordAnalysisService {
                 .map(Map.Entry::getKey)
                 .toList();
 
-        // Devolver con el conteo total (no TF-IDF) para presentar "frecuencia de aparición"
+        // Empaquetar usando la frecuencia total (no TF-IDF) para mostrar “frecuencia de aparición”
         List<TermFrequency> out = new ArrayList<>();
         for (String t : topTerms) {
             out.add(new TermFrequency(t, totalCounts.getOrDefault(t, 0)));
@@ -143,7 +166,23 @@ public class KeywordAnalysisService {
         return out;
     }
 
-    // --- Paso 3: precisión mejorada con métricas detalladas ---
+    private List<String> toNgrams(List<String> toks) {
+        List<String> out = new ArrayList<>(toks.size() * 3);
+        // unigrama
+        out.addAll(toks);
+        // bigrama
+        for (int i = 0; i + 1 < toks.size(); i++) {
+            out.add(toks.get(i) + " " + toks.get(i + 1));
+        }
+        // trigram
+        for (int i = 0; i + 2 < toks.size(); i++) {
+            out.add(toks.get(i) + " " + toks.get(i + 1) + " " + toks.get(i + 2));
+        }
+        return out;
+    }
+
+    // =========================== Paso 3: Precisión por co-ocurrencia ===========================
+
     private PrecisionResult calculateDetailedPrecision(List<TermFrequency> discovered,
                                                        List<String> givenKeywords,
                                                        List<ArticleDTO> articles) {
@@ -151,96 +190,100 @@ public class KeywordAnalysisService {
 
         if (discovered.isEmpty()) {
             result.setOverallPrecision(0.0);
+            result.setRelevantCount(0);
+            result.setTotalTerms(0);
+            result.setTermPrecisions(Collections.emptyList());
             return result;
         }
 
         List<TermPrecision> termPrecisions = new ArrayList<>();
         int relevantCount = 0;
+        int threshold = Math.max(1, (int) Math.ceil(articles.size() * 0.10)); // 10%
 
         for (TermFrequency termFreq : discovered) {
             String term = termFreq.getTerm();
-            TermPrecision termPrecision = new TermPrecision();
-            termPrecision.setTerm(term);
-            termPrecision.setFrequency(termFreq.getFrequency());
+            TermPrecision tp = new TermPrecision();
+            tp.setTerm(term);
+            tp.setFrequency(termFreq.getFrequency());
 
-            // Calcular co-ocurrencia detallada
-            long cooccurrenceCount = calculateExactCooccurrence(term, givenKeywords, articles);
             long totalWithTerm = calculateTotalWithTerm(term, articles);
+            long cooccurrenceCount = calculateExactCooccurrence(term, givenKeywords, articles);
 
-            termPrecision.setCooccurrenceCount(cooccurrenceCount);
-            termPrecision.setTotalWithTerm(totalWithTerm);
+            tp.setTotalWithTerm(totalWithTerm);
+            tp.setCooccurrenceCount(cooccurrenceCount);
 
-            double cooccurrenceRatio = totalWithTerm > 0 ?
-                    (double) cooccurrenceCount / totalWithTerm : 0.0;
-            termPrecision.setCooccurrenceRatio(cooccurrenceRatio);
+            double ratio = (totalWithTerm > 0) ? (cooccurrenceCount / (double) totalWithTerm) : 0.0;
+            // redondeo a 4 decimales para mantener precisión sin ruido visual
+            tp.setCooccurrenceRatio(Math.round(ratio * 10000.0) / 10000.0);
 
-            // Umbral: debe co-ocurrir en al menos 10% de los artículos
-            boolean isRelevant = cooccurrenceCount >= Math.max(1, articles.size() * 0.1);
-            termPrecision.setRelevant(isRelevant);
+            boolean isRelevant = cooccurrenceCount >= threshold;
+            tp.setRelevant(isRelevant);
+            if (isRelevant) relevantCount++;
 
-            if (isRelevant) {
-                relevantCount++;
-            }
-
-            termPrecisions.add(termPrecision);
+            termPrecisions.add(tp);
         }
 
         result.setTermPrecisions(termPrecisions);
         result.setRelevantCount(relevantCount);
         result.setTotalTerms(discovered.size());
-        result.setOverallPrecision(relevantCount / (double) discovered.size());
+        result.setOverallPrecision(discovered.isEmpty() ? 0.0 : relevantCount / (double) discovered.size());
 
         return result;
     }
 
-    // --- Métodos de cálculo auxiliares para precisión ---
+    // ------- Auxiliares de precisión (con bordes léxicos) -------
+
     private long calculateExactCooccurrence(String term, List<String> givenKeywords, List<ArticleDTO> articles) {
-        String t = normalizeText(term);
+        String termNorm = normalizeText(term);
         return articles.stream()
-                .filter(article ->
-                        containsTerm(article.getAbstractText(), t) &&
-                                containsAnyKeyword(article.getAbstractText(), givenKeywords)
-                )
+                .filter(a -> {
+                    String abs = normalizeText(a.getAbstractText());
+                    return containsTerm(abs, termNorm) && containsAnyKeyword(abs, givenKeywords);
+                })
                 .count();
     }
 
     private long calculateTotalWithTerm(String term, List<ArticleDTO> articles) {
-        String t = normalizeText(term);
+        String termNorm = normalizeText(term);
         return articles.stream()
-                .filter(article -> containsTerm(article.getAbstractText(), t))
+                .filter(a -> containsTerm(normalizeText(a.getAbstractText()), termNorm))
                 .count();
     }
 
-    private boolean containsTerm(String text, String term) {
-        if (text == null || term == null) return false;
-        return normalizeText(text).contains(term);
+    private boolean containsAnyKeyword(String normalizedText, List<String> keywords) {
+        if (normalizedText == null || keywords == null) return false;
+        for (String kw : keywords) {
+            String k = normalizeText(kw);
+            if (!k.isBlank() && containsTerm(normalizedText, k)) return true;
+        }
+        return false;
     }
 
-    private boolean containsAnyKeyword(String text, List<String> keywords) {
-        if (text == null || keywords == null) return false;
-        String textNorm = normalizeText(text);
-        return keywords.stream()
-                .filter(keyword -> keyword != null)
-                .anyMatch(keyword -> textNorm.contains(normalizeText(keyword)));
+    /**
+     * Verifica presencia de término/frase normalizada respetando bordes léxicos.
+     */
+    private boolean containsTerm(String normalizedText, String normalizedNeedle) {
+        if (normalizedText == null || normalizedNeedle == null || normalizedNeedle.isBlank()) return false;
+        String n = Pattern.quote(normalizedNeedle);
+        Pattern p = Pattern.compile("(?:(?<=^)|(?<=[^a-z0-9+]))" + n + "(?:(?=$)|(?=[^a-z0-9+]))");
+        return p.matcher(normalizedText).find();
     }
 
+    // =========================== Utilidades comunes ===========================
 
-    private boolean coOccursWithGiven(String term, List<String> givenKeywords, List<ArticleDTO> articles) {
-        // Umbral: término debe co-ocurrir en al menos 10% de los artículos
-        int cooccurrenceThreshold = Math.max(1, (int) (articles.size() * 0.1));
-
-        long cooccurrenceCount = calculateExactCooccurrence(term, givenKeywords, articles);
-        return cooccurrenceCount >= cooccurrenceThreshold;
-    }
-
-    // --- utilidades de normalización ---
+    /**
+     * Normaliza a minúsculas, NFD (quita diacríticos),
+     * conserva letras, dígitos, espacios y '+' (p.ej., c++).
+     */
     private String normalizeText(String s) {
         if (s == null) return "";
         String lower = s.toLowerCase(Locale.ROOT);
         String norm = Normalizer.normalize(lower, Normalizer.Form.NFD)
                 .replaceAll("\\p{M}", ""); // quitar acentos
-        // Mantener signos + (p. ej., c++), y alfanum.
-        return norm.replaceAll("[^a-z0-9+ ]+", " ").replaceAll("\\s+", " ").trim();
+        // Mantener '+' y espacio; convertir lo demás a espacio y colapsar
+        return norm.replaceAll("[^a-z0-9+ ]+", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 
     private List<TermFrequency> toSortedTF(Map<String, Integer> freq) {
@@ -250,7 +293,8 @@ public class KeywordAnalysisService {
                 .toList();
     }
 
-    // --- Clases de apoyo para resultados detallados ---
+    // =========================== Clases de apoyo ===========================
+
     public static class PrecisionResult {
         private double overallPrecision;
         private int relevantCount;
@@ -272,11 +316,11 @@ public class KeywordAnalysisService {
 
     public static class TermPrecision {
         private String term;
-        private int frequency;
-        private long cooccurrenceCount;
-        private long totalWithTerm;
-        private double cooccurrenceRatio;
-        private boolean relevant;
+        private int frequency;              // frecuencia total (suma en todos los docs)
+        private long cooccurrenceCount;     // docs con término + alguna keyword dada
+        private long totalWithTerm;         // docs con el término
+        private double cooccurrenceRatio;   // cooccurrenceCount / totalWithTerm
+        private boolean relevant;           // co-ocurre en ≥ 10% de los artículos
 
         public String getTerm() { return term; }
         public void setTerm(String term) { this.term = term; }
