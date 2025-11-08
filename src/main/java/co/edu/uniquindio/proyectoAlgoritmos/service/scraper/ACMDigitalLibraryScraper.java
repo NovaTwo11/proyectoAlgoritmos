@@ -8,11 +8,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.openqa.selenium.*;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 @Slf4j
 @Service
@@ -30,13 +33,37 @@ public class ACMDigitalLibraryScraper {
         String searchQuery = (query != null && !query.isBlank()) ? query : cfg.getSearchQuery();
         log.info("[ACM] Inicio");
 
-        // Autenticación y navegación
-        try { d.get("https://dl.acm.org/"); utils.humanDelay(); } catch (Exception ignore) {}
+        // Navegar a home
+        try { d.get("https://dl.acm.org/"); } catch (Exception ignore) {}
 
-        // Aceptar cookies (Cookiebot)
+        // NUEVO: aceptar cookies inmediatamente al cargar la página antes de cualquier interacción
+        try {
+            WebDriverWait wait = new WebDriverWait(d, Duration.ofSeconds(8));
+            WebElement cookieBtn = null;
+            // Intentos secuenciales de distintos selectores
+            try { cookieBtn = wait.until(ExpectedConditions.elementToBeClickable(By.id("CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll"))); } catch (Exception ignore) {}
+            if (cookieBtn == null) {
+                try { cookieBtn = wait.until(ExpectedConditions.elementToBeClickable(By.xpath("//button[@id='CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll' or normalize-space(text())='Allow all cookies']"))); } catch (Exception ignore) {}
+            }
+            if (cookieBtn == null) {
+                try { cookieBtn = wait.until(ExpectedConditions.elementToBeClickable(By.cssSelector("button.CybotCookiebotDialogBodyButton#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll"))); } catch (Exception ignore) {}
+            }
+            if (cookieBtn != null) {
+                try { cookieBtn.click(); } catch (Exception e) { utils.clickJS(d, cookieBtn); }
+                utils.shortDelay();
+                log.info("[ACM] Cookies aceptadas inmediatamente");
+            } else {
+                log.info("[ACM] Botón de cookies no encontrado en el tiempo límite");
+            }
+        } catch (Exception e) {
+            log.debug("[ACM] Error al aceptar cookies: {}", e.getMessage());
+        }
+
+        // (Se mantiene el bloque anterior de aceptación como fallback pero se puede eliminar si se desea)
+        // Aceptar cookies (Cookiebot) Fallback anterior (dejado por compatibilidad; puede eliminarse)
         try {
             WebElement allowCookies = utils.findAnyVisible(d, 5, By.id("CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll"));
-            if (allowCookies != null) { try { allowCookies.click(); } catch (Exception e) { utils.clickJS(d, allowCookies); } utils.shortDelay(); log.info("[ACM] Cookies aceptadas"); }
+            if (allowCookies != null) { try { allowCookies.click(); } catch (Exception e) { utils.clickJS(d, allowCookies); } utils.shortDelay(); log.info("[ACM] Cookies aceptadas (fallback)"); }
         } catch (Exception ignore) {}
 
         // Buscar con AllField (robusto con reintentos y fallback a URL directa)

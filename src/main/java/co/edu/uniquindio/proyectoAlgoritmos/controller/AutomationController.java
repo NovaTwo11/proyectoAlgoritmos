@@ -2,6 +2,7 @@ package co.edu.uniquindio.proyectoAlgoritmos.controller;
 
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.ArticleDTO;
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.KeywordAnalysisResponse;
+import co.edu.uniquindio.proyectoAlgoritmos.model.dto.MapCountryCountDTO;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.AnalyzeSimilarityService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.SimilarityService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.dto.AlgorithmRunResult;
@@ -11,6 +12,7 @@ import co.edu.uniquindio.proyectoAlgoritmos.service.dendrograms.HierarchicalClus
 import co.edu.uniquindio.proyectoAlgoritmos.service.graphs.*;
 import co.edu.uniquindio.proyectoAlgoritmos.service.keywords.KeywordAnalysisService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.selenium.AutomationOrchestratorService;
+import co.edu.uniquindio.proyectoAlgoritmos.service.viz.VizAggregationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -36,9 +38,11 @@ public class AutomationController {
     private final PreprocessingPipelineService preprocessingPipelineService;
     private final SimilarityService similarityService;
     private final HierarchicalClusteringCore hclust;
+    private final VizAggregationService vizAggregationService;
 
     @PostMapping("/download-articles")
     public ResponseEntity<String> runReq1(@RequestParam(required = false) String query) {
+        //orchestrator.downloadAll();
         return orchestrator.downloadArticles(query);
     }
 
@@ -215,4 +219,12 @@ public class AutomationController {
         for (int i=0;i<clusters.size();i++) if (clusters.get(i).contains(idx)) return i;
         return -1;
     }
+
+    // Requerimiento 5 - Punto (1): mapa de calor países del primer autor
+    @GetMapping("/viz/map-first-author")
+    public ResponseEntity<List<MapCountryCountDTO>> mapFirstAuthorCountries() {
+        var data = vizAggregationService.aggregateFirstAuthorCountries();
+        return ResponseEntity.ok(data);
+    }
+
 }

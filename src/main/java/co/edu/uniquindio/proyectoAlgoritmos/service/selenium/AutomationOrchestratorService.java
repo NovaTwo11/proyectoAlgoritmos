@@ -2,6 +2,7 @@ package co.edu.uniquindio.proyectoAlgoritmos.service.selenium;
 
 import co.edu.uniquindio.proyectoAlgoritmos.config.SeleniumConfig;
 import co.edu.uniquindio.proyectoAlgoritmos.service.bibtex.BibTeXUnificationService;
+import co.edu.uniquindio.proyectoAlgoritmos.service.bibtex.OpenAlexCountryEnrichmentService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.scraper.ACMDigitalLibraryScraper;
 import co.edu.uniquindio.proyectoAlgoritmos.service.scraper.WebOfScienceScraper;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ public class AutomationOrchestratorService {
     private final ACMDigitalLibraryScraper acm;
     private final WebOfScienceScraper wos;
     private final BibTeXUnificationService unifier;
+    private final OpenAlexCountryEnrichmentService openAlexCountryEnrichmentService;
 
     @Value("${automation.dendrogramas.output-dir:src/main/resources/data/dendrogramas}")
     private String dendroOutDir;
@@ -42,6 +44,7 @@ public class AutomationOrchestratorService {
                 // Limpiar carpetas indicadas
                 cleanDir("src/main/resources/data/normalized");
                 cleanDir("src/main/resources/data/output");
+                cleanDir("src/main/resources/data/grafos");
                 cleanDir(cfg.getDownloadDirectory()); // src/main/resources/downloads
                 cleanDir(dendroOutDir); // limpiar también dendrogramas
                 writeLastQuery(effectiveQuery);
@@ -84,6 +87,10 @@ public class AutomationOrchestratorService {
             String dups = outDir + "/resultados_duplicados.bib";
             var res = unifier.processDownloaded(cfg.getDownloadDirectory(), unified, dups);
             log.info("Resumen final: únicos={} | duplicados={}", res.getOrDefault("unified", java.util.Collections.emptyList()).size(), res.getOrDefault("duplicates", java.util.Collections.emptyList()).size());
+
+            // Lanzar enriquecimiento en paralelo
+            String enriched = outDir + "/resultados_unificados_autor_pais.bib";
+            openAlexCountryEnrichmentService.enrichFirstAuthorCountryAsync(unified, enriched);
         } catch (Exception e) {
             log.error("Error ejecutando Requerimiento 1: {}", e.getMessage(), e);
             throw new RuntimeException(e);
