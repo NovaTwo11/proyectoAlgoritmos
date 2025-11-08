@@ -111,12 +111,6 @@ public class AutomationController {
         return ResponseEntity.ok(buildCooccurrenceR3R4());
     }
 
-    // Requerimiento 2 (Seguimiento 2)
-    // Variante explícita: construir con vocabulario fijo (R3 + R4)
-    @PostMapping("/coocurrence/build-fixed")
-    public ResponseEntity<?> buildCooccurrenceFixed() {
-        return ResponseEntity.ok(buildCooccurrenceR3R4());
-    }
 
     // Helper local compartido para construir R3+R4
     private Map<String,Object> buildCooccurrenceR3R4() {
