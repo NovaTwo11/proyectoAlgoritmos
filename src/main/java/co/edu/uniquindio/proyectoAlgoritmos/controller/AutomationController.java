@@ -66,31 +66,43 @@ public class AutomationController {
      */
 
     // Requerimiento 1 - construir grafo de citaciones (inferidas por similitud)
+    // Construir grafo (permite threshold y mode)
     @PostMapping("/citations/build")
-    public ResponseEntity<?> buildCitationGraph(@RequestParam(required = false) Double threshold) {
-        var result = citationGraphService.build(threshold);
+    public ResponseEntity<?> buildCitationGraph(
+            @RequestParam(required = false) Double threshold,
+            @RequestParam(required = false) String mode  // ABSTRACTS_TFIDF | COMBINED | KEYWORDS
+    ) {
+        var result = citationGraphService.build(threshold, mode);
         var export = citationGraphService.exportRelationships();
-        // Generar imagen como efecto colateral (no se retorna base64)
+        // Render opcional: si deseas también mandar base64 agrega render.base64
         var render = citationGraphRendererService.renderGraph(null);
-        return ResponseEntity.ok(java.util.Map.of(
+        return ResponseEntity.ok(Map.of(
                 "graph", result,
                 "relationships", export,
-                "image", java.util.Map.of(
-                        "filePath", render.filePath
-                )
+                "image", Map.of("filePath", render.filePath)
         ));
     }
 
-    // Requerimiento 1 - camino mínimo (Dijkstra) entre dos artículos (ids)
+    // Camino mínimo (Dijkstra)
     @GetMapping("/citations/shortest")
-    public ResponseEntity<CitationGraphService.PathResult> shortestPath(@RequestParam String sourceId, @RequestParam String targetId) {
-        return ResponseEntity.ok(citationGraphService.shortestPath(sourceId, targetId));
+    public ResponseEntity<?> shortestPath(
+            @RequestParam String sourceId,
+            @RequestParam String targetId
+    ) {
+        var path = citationGraphService.shortestPath(sourceId, targetId);
+        return ResponseEntity.ok(path);
     }
 
-    // Requerimiento 1 - componentes (débiles y fuertes)
+    // Componentes (débiles y fuertes)
     @GetMapping("/citations/components")
-    public ResponseEntity<CitationGraphService.Components> components() {
+    public ResponseEntity<?> components() {
         return ResponseEntity.ok(citationGraphService.components());
+    }
+
+    // Floyd–Warshall (all pairs)
+    @GetMapping("/citations/allpairs")
+    public ResponseEntity<?> allPairs() {
+        return ResponseEntity.ok(citationGraphService.allPairsShortestPaths());
     }
 
     // Requerimiento 2 (Seguimiento 2) - Construcción del grafo de coocurrencia usando R3+R4 (garantiza 30 de R3)
