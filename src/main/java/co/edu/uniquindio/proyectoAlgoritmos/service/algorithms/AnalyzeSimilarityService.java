@@ -1,10 +1,6 @@
-package co.edu.uniquindio.proyectoAlgoritmos.service;
+package co.edu.uniquindio.proyectoAlgoritmos.service.algorithms;
 
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.ArticleDTO;
-import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.BM25CosineSimilarity;
-import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.LevenshteinSimilarity;
-import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.JaccardSimilarity;
-import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.TFIDFCosineSimilarity;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.dto.AlgorithmRunResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

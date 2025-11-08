@@ -1,4 +1,4 @@
-package co.edu.uniquindio.proyectoAlgoritmos.service;
+package co.edu.uniquindio.proyectoAlgoritmos.service.graphs;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;

@@ -2,8 +2,15 @@ package co.edu.uniquindio.proyectoAlgoritmos.controller;
 
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.ArticleDTO;
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.KeywordAnalysisResponse;
-import co.edu.uniquindio.proyectoAlgoritmos.service.*;
+import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.AnalyzeSimilarityService;
+import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.SimilarityService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.dto.AlgorithmRunResult;
+import co.edu.uniquindio.proyectoAlgoritmos.service.articles.ArticlesService;
+import co.edu.uniquindio.proyectoAlgoritmos.service.articles.PreprocessingPipelineService;
+import co.edu.uniquindio.proyectoAlgoritmos.service.dendrograms.HierarchicalClusteringCore;
+import co.edu.uniquindio.proyectoAlgoritmos.service.graphs.*;
+import co.edu.uniquindio.proyectoAlgoritmos.service.keywords.KeywordAnalysisService;
+import co.edu.uniquindio.proyectoAlgoritmos.service.selenium.AutomationOrchestratorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

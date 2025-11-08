@@ -1,9 +1,13 @@
-package co.edu.uniquindio.proyectoAlgoritmos.service;
+package co.edu.uniquindio.proyectoAlgoritmos.service.graphs;
 
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.ArticleDTO;
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.PreprocessedArticleDTO;
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.PreprocessingResponse;
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.SimilarityResponse;
+import co.edu.uniquindio.proyectoAlgoritmos.service.dendrograms.DendrogramRendererService;
+import co.edu.uniquindio.proyectoAlgoritmos.service.dendrograms.HierarchicalClusteringCore;
+import co.edu.uniquindio.proyectoAlgoritmos.service.articles.PreprocessingPipelineService;
+import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.SimilarityService;
 import co.edu.uniquindio.proyectoAlgoritmos.util.DendroMetrics;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;

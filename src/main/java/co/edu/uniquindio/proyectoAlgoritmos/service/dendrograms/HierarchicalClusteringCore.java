@@ -1,4 +1,4 @@
-package co.edu.uniquindio.proyectoAlgoritmos.service;
+package co.edu.uniquindio.proyectoAlgoritmos.service.dendrograms;
 
 import org.springframework.stereotype.Service;
 

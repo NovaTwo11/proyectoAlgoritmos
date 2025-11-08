@@ -1,6 +1,7 @@
-package co.edu.uniquindio.proyectoAlgoritmos.service;
+package co.edu.uniquindio.proyectoAlgoritmos.service.graphs;
 
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.ArticleDTO;
+import co.edu.uniquindio.proyectoAlgoritmos.service.articles.ArticlesService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.TFIDFCosineSimilarity;
 import lombok.AllArgsConstructor;
 import lombok.Data;

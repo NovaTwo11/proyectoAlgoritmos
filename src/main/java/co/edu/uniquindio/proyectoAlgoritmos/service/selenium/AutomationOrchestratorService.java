@@ -1,10 +1,9 @@
-package co.edu.uniquindio.proyectoAlgoritmos.service;
+package co.edu.uniquindio.proyectoAlgoritmos.service.selenium;
 
 import co.edu.uniquindio.proyectoAlgoritmos.config.SeleniumConfig;
 import co.edu.uniquindio.proyectoAlgoritmos.service.bibtex.BibTeXUnificationService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.scraper.ACMDigitalLibraryScraper;
 import co.edu.uniquindio.proyectoAlgoritmos.service.scraper.WebOfScienceScraper;
-import co.edu.uniquindio.proyectoAlgoritmos.service.selenium.WebDriverService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.openqa.selenium.WebDriver;

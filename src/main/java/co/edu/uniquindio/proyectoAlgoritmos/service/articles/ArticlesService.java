@@ -1,4 +1,4 @@
-package co.edu.uniquindio.proyectoAlgoritmos.service;
+package co.edu.uniquindio.proyectoAlgoritmos.service.articles;
 
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.ArticleDTO;
 import org.jbibtex.*;

@@ -1,4 +1,4 @@
-package co.edu.uniquindio.proyectoAlgoritmos.service;
+package co.edu.uniquindio.proyectoAlgoritmos.service.algorithms;
 
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.PreprocessedArticleDTO;
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.SimilarityPairDTO;
