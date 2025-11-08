@@ -13,6 +13,7 @@ import co.edu.uniquindio.proyectoAlgoritmos.service.graphs.*;
 import co.edu.uniquindio.proyectoAlgoritmos.service.keywords.KeywordAnalysisService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.selenium.AutomationOrchestratorService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.viz.VizAggregationService;
+import co.edu.uniquindio.proyectoAlgoritmos.service.viz.WordCloudService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -39,6 +40,7 @@ public class AutomationController {
     private final SimilarityService similarityService;
     private final HierarchicalClusteringCore hclust;
     private final VizAggregationService vizAggregationService;
+    private final WordCloudService wordCloudService;
 
     @PostMapping("/download-articles")
     public ResponseEntity<String> runReq1(@RequestParam(required = false) String query) {
@@ -225,6 +227,12 @@ public class AutomationController {
     public ResponseEntity<List<MapCountryCountDTO>> mapFirstAuthorCountries() {
         var data = vizAggregationService.aggregateFirstAuthorCountries();
         return ResponseEntity.ok(data);
+    }
+
+    // Requerimiento 5 - Punto (2): nube de palabras dinámica (abstracts + keywords)
+    @GetMapping("/viz/wordcloud")
+    public ResponseEntity<?> wordCloud(@RequestParam(required = false) Integer limit) {
+        return wordCloudService.buildWordCloud(limit);
     }
 
 }
