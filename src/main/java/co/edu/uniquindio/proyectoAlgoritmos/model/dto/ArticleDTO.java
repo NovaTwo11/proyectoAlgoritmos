@@ -12,4 +12,6 @@ public class ArticleDTO {
     private String pages;
     private List<String> keywords;
     private String abstractText;
+    private String journal;     // revista
+    private String booktitle;   // conferencia/libro
 }

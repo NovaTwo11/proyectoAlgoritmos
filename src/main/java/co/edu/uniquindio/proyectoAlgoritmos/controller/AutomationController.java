@@ -3,6 +3,7 @@ package co.edu.uniquindio.proyectoAlgoritmos.controller;
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.ArticleDTO;
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.KeywordAnalysisResponse;
 import co.edu.uniquindio.proyectoAlgoritmos.model.dto.MapCountryCountDTO;
+import co.edu.uniquindio.proyectoAlgoritmos.model.dto.TimelineResponse;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.AnalyzeSimilarityService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.SimilarityService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.algorithms.dto.AlgorithmRunResult;
@@ -14,6 +15,7 @@ import co.edu.uniquindio.proyectoAlgoritmos.service.keywords.KeywordAnalysisServ
 import co.edu.uniquindio.proyectoAlgoritmos.service.selenium.AutomationOrchestratorService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.viz.VizAggregationService;
 import co.edu.uniquindio.proyectoAlgoritmos.service.viz.WordCloudService;
+import co.edu.uniquindio.proyectoAlgoritmos.service.viz.TimelineVizService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -41,6 +43,7 @@ public class AutomationController {
     private final HierarchicalClusteringCore hclust;
     private final VizAggregationService vizAggregationService;
     private final WordCloudService wordCloudService;
+    private final TimelineVizService timelineVizService;
 
     @PostMapping("/download-articles")
     public ResponseEntity<String> runReq1(@RequestParam(required = false) String query) {
@@ -233,6 +236,12 @@ public class AutomationController {
     @GetMapping("/viz/wordcloud")
     public ResponseEntity<?> wordCloud(@RequestParam(required = false) Integer limit) {
         return wordCloudService.buildWordCloud(limit);
+    }
+
+    // Requerimiento 5 - Punto (3): línea temporal publicaciones por año y revista
+    @GetMapping("/viz/timeline")
+    public ResponseEntity<TimelineResponse> timeline() {
+        return timelineVizService.buildTimeline();
     }
 
 }

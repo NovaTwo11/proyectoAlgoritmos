@@ -62,6 +62,9 @@ public class ArticlesService {
             dto.setTitle(getString(be, "title"));
             dto.setAuthors(splitAuthors(getString(be, "author")));
             dto.setYear(parseYear(getString(be, "year")));
+            // Nuevos campos
+            dto.setJournal(getString(be, "journal"));
+            dto.setBooktitle(getString(be, "booktitle"));
 
             // Páginas: usar numpages si está; si no, calcular desde rango (start-end/en-dash)
             String pagesField = getString(be, "pages");
