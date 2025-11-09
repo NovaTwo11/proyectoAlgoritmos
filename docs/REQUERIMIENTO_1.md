@@ -1,141 +1,124 @@
-# Requerimiento 1 — Automatización de búsqueda y descarga bibliográfica (ScienceDirect e IEEE Xplore)
+# Requerimiento 1 — Automatización de búsqueda, descarga y unificación (ACM Digital Library y Web of Science)
 
-Este requerimiento automatiza la búsqueda de artículos en ScienceDirect e IEEE Xplore, descarga las citas en formato BibTeX, normaliza los registros y genera salidas unificadas, filtradas y duplicadas según el flujo definido en Automatización.
+Este requerimiento automatiza la búsqueda en dos bases (ACM Digital Library y Web of Science), descarga las citas en formato BibTeX, normaliza los registros y genera dos salidas: un archivo unificado de artículos únicos y otro con los duplicados detectados.
 
-## Objetivo
-- Ejecutar una búsqueda por cadena (query) en ScienceDirect e IEEE Xplore.
-- Exportar los resultados en BibTeX (100 por página cuando sea posible) y paginar hasta un máximo configurable.
-- Leer todos los .bib descargados, parsearlos, normalizar campos y hacer deduplicación por DOI o título normalizado + año.
-- Escribir salidas en rutas claras por fuente y en archivos de resultados unificados/filtrados/duplicados.
-
-## Alcance y supuestos
-- Bases implementadas: ScienceDirect y IEEE Xplore.
-- Autenticación: vía proxy institucional/SSO y/o botón “Continuar con Google” (id="btn-google"). Si el flujo requiere 2FA, se permite intervención manual.
-- El scraping usa Selenium (Chrome) y espera la descarga del .bib para renombrarlo con prefijo de la fuente + timestamp.
-
-## Flujo de alto nivel (Automatización)
-1) Autenticación vía proxy institucional:
-   - IEEE: https://login.crai.referencistas.com/login?url=https://ieeexplore.ieee.org
-   - ScienceDirect: https://login.crai.referencistas.com/login?url=https://www.sciencedirect.com
-   - Si no se logra, se intenta navegar desde el portal institucional configurado y, en último caso, acceder directo a la base.
-   - Google SSO: si aparece el botón con `id="btn-google"`, se hace clic y se completa el flujo (con credenciales configuradas o manualmente si hay 2FA).
-
-2) Búsqueda:
-   - Escribir la cadena `query` en el buscador de la base y enviar.
-
-3) Resultados por página:
-   - Intentar configurar 100 por página mediante los controles disponibles (dropdown/select), si la UI lo permite.
-
-4) Exportación por página:
-   - Seleccionar todos los resultados visibles (si hay opción) y abrir el diálogo de exportación.
-   - Elegir formato BibTeX y descargar.
-   - Esperar finalización de la descarga y renombrar el .bib a `Fuente_yyyyMMdd_HHmmss_SSS.bib` en `./resources/downloads`.
-
-5) Paginación:
-   - Ir a la siguiente página y repetir hasta alcanzar el límite `max pages` o hasta que no haya más páginas.
-
-6) Post-proceso:
-   - Leer todos los .bib descargados, parsear con jbibtex, normalizar campos y deduplicar.
-   - Generar salidas unificadas y listados de filtrados/duplicados en `./resources/data/output/douwnloads`.
+## Qué hace (visión corta)
+- Dispara la descarga desde un endpoint REST con una `query` opcional.
+- Limpia directorios de trabajo si la query cambió (para evitar mezclar resultados viejos).
+- Abre un navegador (Selenium/Chrome), busca en ACM y Web of Science, exporta BibTeX y guarda en `src/main/resources/downloads`.
+- Parseo + normalización con jbibtex (y fallback robusto), deduplicación y fusión de campos.
+- Escribe salidas:
+  - Únicos: `src/main/resources/data/output/resultados_unificados.bib`
+  - Duplicados: `src/main/resources/data/output/resultados_duplicados.bib`
+  - Normalizados por fuente: `src/main/resources/data/normalized/*.bib`
 
 ## Punto de entrada (API)
-- Endpoint: `POST /api/automation/requirement-1`
-- Parámetro: `query` (opcional). Si no se envía, se usa el valor por defecto de configuración.
+- Endpoint real del proyecto: `POST /api/algoritmos/download-articles`
+- Parámetro: `query` (opcional). Si se omite, usa `automation.search.query` desde `application.yml`.
 
-Ejemplo (Windows CMD):
+Ejemplo (bash):
+```bash
+curl -X POST "http://localhost:8080/api/algoritmos/download-articles?query=generative%20artificial%20intelligence"
 ```
-curl -X POST "http://localhost:8080/api/automation/requirement-1?query=generative%20artificial%20intelligence"
+
+## Flujo implementado (resumen)
+1) Verifica si la `query` es igual a la última (`src/main/resources/data/last_query.txt`). Si cambió, limpia:
+   - `src/main/resources/downloads`, `src/main/resources/data/normalized`, `src/main/resources/data/output` y `src/main/resources/data/dendrogramas`.
+2) Descarga con Selenium:
+   - ACM y Web of Science: ejecuta búsqueda, exporta BibTeX y guarda en `downloads` con prefijo de fuente + timestamp.
+3) Unificación automática:
+   - Lee todos los `.bib`, parsea a objetos `Article`, normaliza campos y deduplica.
+   - Si hay duplicados (mismo título+autores normalizados), fusiona campos (autores/keywords sin repetir, `abstract` más largo, campos no vacíos).
+4) Exporta resultados:
+   - `resultados_unificados.bib` (únicos) y `resultados_duplicados.bib` (duplicados) en `src/main/resources/data/output`.
+   - Además, escribe `acm_normalized.bib` y `webofscience_normalized.bib` en `src/main/resources/data/normalized`.
+
+## Código principal (extractos)
+- Controlador (punto de entrada):
+```java
+// AutomationController
+@PostMapping("/download-articles")
+public ResponseEntity<String> runReq1(@RequestParam(required = false) String query) {
+    return orchestrator.downloadArticles(query);
+}
 ```
 
-## Parámetros y configuración
-- En `src/main/resources/application.yml` (claves relevantes):
-  - `automation.email` y `automation.password`: credenciales (correo académico/Google, según flujo). Puedes usar variables de entorno si lo prefieres:
-    - `automation.email: "${ACADEMIC_EMAIL:}"`
-    - `automation.password: "${MAIL_PASSWORD:}"`
-  - `automation.search.query`: query por defecto cuando el endpoint no recibe `query`.
-  - `automation.download.directory`: ruta donde el navegador guarda los .bib. Por defecto: `./resources/downloads`.
-  - `automation.portal.url`: URL del portal institucional para navegar a las bases si el proxy no redirige automáticamente.
-  - `automation.max.pages`: número máximo de páginas de resultados a procesar por base. Ej.: `3`.
-  - `automation.headless`: `false` recomendado para poder intervenir manualmente en SSO/2FA si fuese necesario.
+- Orquestador (descarga + limpieza + unificación):
+```java
+// AutomationOrchestratorService
+public ResponseEntity<String> downloadArticles(String query) {
+    String effectiveQuery = (query != null && !query.isBlank()) ? query : cfg.getSearchQuery();
+    String last = readLastQuery();
+    boolean sameQuery = last != null && last.equalsIgnoreCase(effectiveQuery);
 
-Sobre “pages”: controla cuántas páginas de resultados se recorren. Si la búsqueda devuelve 24 páginas y `automation.max.pages = 3`, solo se procesan las 3 primeras. Si quieres intentar procesar “todas”, puedes subir este número, aunque la UI o límites del sitio pueden acotar.
+    if (!sameQuery) {
+        cleanDir("src/main/resources/data/normalized");
+        cleanDir("src/main/resources/data/output");
+        cleanDir(cfg.getDownloadDirectory());
+        cleanDir(dendroOutDir);
+        writeLastQuery(effectiveQuery);
+    }
 
-## Detalles de UI — IEEE Xplore (100 por página y exportación)
-Para robustecer la automatización en IEEE Xplore, estos son los elementos relevantes reportados:
-- Cambiar a 100 por página:
-  - Botón principal: un botón con texto `Items Per Page` que abre el panel de opciones.
-  - Opciones disponibles dentro del panel: botones con textos `10`, `25`, `50`, `75`, `100`. Seleccionar `100`.
-  - En algunas vistas, puede existir un botón adicional con texto `100` fuera del panel; priorizar el panel de opciones si ambos aparecen.
-- Seleccionar todos los resultados en la página:
-  - Checkbox de selección global: `<input>` (checkbox de “seleccionar todos” en la grilla de resultados).
-- Exportar:
-  - Botón `Export`: `<button class="xpl-btn-primary">Export</button>`.
-  - En el diálogo, ir a la pestaña `Citations` (ej. `<a id="ngb-nav-8" class="nav-link">Citations</a>`).
-  - Formato: seleccionar radio “BibTeX” (etiqueta asociada a `for="download-bibtex"`).
-  - Contenido: seleccionar radio “Citation and Abstract` (etiqueta asociada a `for="citation-abstract"`).
-  - Finalmente, confirmar la descarga (botón de descarga/confirmación en el modal, según la UI actual).
+    if (!sameQuery || isEmptyDir(cfg.getDownloadDirectory())) {
+        WebDriver driver = driverFactory.createChromeDriver();
+        try {
+            acm.download(driver, effectiveQuery);
+            wos.download(driver, effectiveQuery);
+        } finally { driver.quit(); }
+    }
+    downloadAll(); // parsear, unificar y exportar
+    return ResponseEntity.ok("Proceso completado exitosamente.");
+}
 
-Sugerencia: usar localizadores por texto visible y clases estables, con esperas explícitas hasta que el modal y radios estén clicables.
+public void downloadAll() {
+    String outDir = "src/main/resources/data/output";
+    String unified = outDir + "/resultados_unificados.bib";
+    String dups = outDir + "/resultados_duplicados.bib";
+    unifier.processDownloaded(cfg.getDownloadDirectory(), unified, dups);
+}
+```
 
-## Salidas y formatos
-- Descargas crudas (.bib) por base: `./resources/downloads/`
-  - Se renombran automáticamente como `ScienceDirect_YYYYMMDD_HHMMSS_SSS.bib`, `IEEE_Xplore_YYYYMMDD_HHMMSS_SSS.bib`, etc.
+- Unificación (clave por título+autores normalizados y fusión de campos):
+```java
+// BibTeXUnificationService
+public Map<String, List<Article>> unify(List<Article> input) {
+    Map<String, Article> unique = new LinkedHashMap<>();
+    List<Article> dups = new ArrayList<>();
+    for (Article a : input) {
+        String key = titleKey(a.getTitle()) + "|" + authorsKey(a.getAuthors());
+        if (!unique.containsKey(key)) {
+            unique.put(key, a);
+        } else {
+            Article merged = merge(unique.get(key), a);
+            unique.put(key, merged);
+            dups.add(a);
+        }
+    }
+    return Map.of("unified", new ArrayList<>(unique.values()),
+                  "duplicates", dups);
+}
+```
 
-- Agregados por fuente y normalizados: `./resources/data/output/douwnloads/`
-  - `sciencedirect_downloads.bib` (concatenación cruda de descargas de SD)
-  - `ieee_xplore_downloads.bib` (concatenación cruda de descargas de IEEE)
-  - `sciencedirect_normalized.bib` (entradas parseadas y reescritas en BibTeX normalizado)
-  - `ieee_xplore_normalized.bib` (entradas parseadas y reescritas en BibTeX normalizado)
+- Exportación de resultados:
+```java
+// BibTeXParserService (resumen)
+public void exportCustomBib(List<Article> arts, File out) throws IOException {
+    out.getParentFile().mkdirs();
+    try (BufferedWriter w = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(out), StandardCharsets.UTF_8))) {
+        for (Article a : arts) {
+            w.write(formatAsBib(a));
+            w.newLine();
+        }
+    }
+}
+```
 
-- Resultados consolidados/deduplicados: `./resources/data/output/douwnloads/`
-  - `resultados_unificados.bib`: salida en BibTeX normalizado de los artículos únicos.
-  - `filtered_articles.txt`: cada artículo único se imprime como `@Filtered Article{...}` con los campos pedidos:
-    - Ejemplo:
-      ```
-      @Filtered Article{1129ba99-98fb-4456-b52b-fb25c794cb22,  abstract = {...},  authors = {['Autor 1', 'Autor 2']},  journal = {Revista o booktitle},  keywords = {['kw1', 'kw2']},  title = {Título},  year = {2023} }
-      ```
-  - `duplicated_articles.txt`: cada duplicado detectado se imprime como `Article{...}` con los campos pedidos:
-    - Ejemplo:
-      ```
-      Article{577c2b10-a4b2-47fc-9772-0fdeb85785c9,  abstract = {...},  authors = {['Autor 1']},  journal = {Revista},  keywords = {['kw']},  title = {Título},  year = {2012} }
-      ```
+## Dónde quedan los archivos
+- Descargas (crudas): `src/main/resources/downloads/`
+- Normalizados por fuente: `src/main/resources/data/normalized/`
+- Unificados y duplicados: `src/main/resources/data/output/`
 
-- Formato BibTeX esperado para artículos (ejemplo de entrada normalizada):
-  ```
-  @article{WU2018127, title = {Single dose testosterone administration modulates emotional reactivity and counterfactual choice in healthy males}, journal = {Psychoneuroendocrinology}, volume = {90}, pages = {127-133}, year = {2018}, issn = {0306-4530}, doi = {https://doi.org/10.1016/j.psyneuen.2018.02.018}, url = {https://www.sciencedirect.com/science/article/pii/S0306453017312532}, author = {Yin Wu y Luke Clark y Samuele Zilioli y Christoph Eisenegger y Claire M. Gillan y Huihua Deng y Hong Li}, keywords = {Testosterone, Reward, Regret, Emotion, Human male, Dual process}, abstract = {...} }
-  ```
-
-## Normalización y deduplicación
-- Parser: jbibtex transforma cada entrada a la clase de dominio `Article` con campos estandarizados: title, authors, journal/booktitle, year, volume, pages, doi, url, issn/isbn, keywords, abstract.
-- Clave de deduplicación:
-  - Si hay DOI: `doi:<valor>`.
-  - Si no: `title(normalizado, sin puntuación y minúsculas) + year`.
-- Fusión de duplicados: prioriza campos no vacíos, une autores/keywords sin repetir y conserva el abstract más largo.
-
-## Logs y diagnóstico
-- Archivo: `./logs/application.log`.
-- Mensajes relevantes:
-  - Inicio/fin por base: `[ScienceDirect] Inicio/Fin`, `[IEEE Xplore] Inicio/Fin`.
-  - Descarga/renombrado: `Renombrado nombre_original -> PREFIJO_yyyyMMdd_HHmmss_SSS.bib`.
-  - Paginación: `Página x/y` y `No hay más páginas ...`.
-  - Advertencias de exportación (típico si no hay sesión):
-    - `Fallo exportando en IEEE: No se pudo abrir el diálogo de exportación` → suele indicar sesión no iniciada; realiza el login (SSO/Google) y reintenta.
-
-## Recomendaciones y solución de problemas
-- Autenticación:
-  - Mantén `automation.headless: false` para poder completar manualmente el 2FA si se requiere.
-  - Si usas Google, el flujo intenta hacer clic en `id="btn-google"` cuando está disponible y luego completa email/contraseña si están configurados; ante 2FA, espera tu intervención.
-- Cobertura de resultados:
-  - Ajusta `automation.max.pages` si necesitas más páginas. Ten en cuenta que las páginas listadas por la UI pueden ser muchas; evita números excesivos si hay limitaciones de sesión/tiempo.
-- Estabilidad de selectores:
-  - Las UIs de las bases cambian. Si se rompen selectores (no encuentra buscador/exportación), revisa los logs para identificar el paso y actualiza los localizadores.
-- Seguridad de credenciales:
-  - Evita subir credenciales reales. Usa variables de entorno (`ACADEMIC_EMAIL`, `MAIL_PASSWORD`) y referencia en `application.yml`.
-
-## Componentes principales involucrados
-- Controlador: `AutomationController` (`/api/automation/requirement-1`).
-- Orquestador: `AutomationOrchestratorService` (dispara scraping en ambas bases y luego unificación).
-- Scrapers: `ScienceDirectScraper`, `IEEEXploreScraper` (búsqueda, 100/pg, export, descarga/renombrado).
-- Descargas: `DownloadHelper` (espera y renombra el .bib más reciente).
-- Parsing/normalización: `BibTeXParserService` (convierte BibTeX → `Article`, exporta BibTeX normalizado y formatos @Filtered/@Duplicated).
-- Unificación/deduplicación y salidas: `BibTeXUnificationService` (unifica, divide en únicos y duplicados, y escribe los archivos finales).
+## Notas
+- El proceso es end‑to‑end: desde la búsqueda hasta la generación de los dos archivos finales.
+- La deduplicación favorece campos no vacíos y conserva el resumen más largo para maximizar información en el registro unificado.
+- Los logs de progreso/errores se guardan en `logs/application.log`.

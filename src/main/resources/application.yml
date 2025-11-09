@@ -21,7 +21,7 @@ automation:
     forceDirect: true           # abre conexiones DIRECT, sin proxy del sistema
     persistentProfile: false    # usa perfil temporal para evitar cookies/redirecciones previas
   dendrogramas:
-    output-dir: src/main/resources/data/dendrogramas
+    output-dir: "src/main/resources/data/dendrogramas"
 
 logging:
   level:
