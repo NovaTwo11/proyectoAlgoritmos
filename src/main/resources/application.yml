@@ -15,7 +15,7 @@ automation:
     url: "https://library.uniquindio.edu.co/databases"
   max:
     pages: 3
-  headless: false
+  headless: true
   auto-run: false  # cambia a true si quieres que corra al iniciar
   chrome:
     forceDirect: true           # abre conexiones DIRECT, sin proxy del sistema
